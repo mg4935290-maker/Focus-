@@ -160,8 +160,22 @@ fun FullScreenTimerScreen(
                 .align(Alignment.Center)
                 .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
+            Surface(
+                shape = CircleShape,
+                color = Color(0xFF34D399).copy(alpha = 0.18f),
+                border = BorderStroke(1.dp, Color(0xFF6EE7B7).copy(alpha = 0.5f))
+            ) {
+                Text(
+                    text = stringResource(R.string.salawat_banner_text),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFA7F3D0),
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
+                )
+            }
+
             Box(
                 modifier = Modifier.size(250.dp),
                 contentAlignment = Alignment.Center

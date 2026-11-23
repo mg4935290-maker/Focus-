@@ -5,6 +5,22 @@
     <string name="app_subtitle">مساحتك الهادئة للمذاكرة والإنجاز</string>
     <string name="created_by_galileo">created by Galileo</string>
 
+    <!-- Salawat Reminder -->
+    <string name="salawat_phrase">صلي على النبي ﷺ</string>
+    <string name="salawat_banner_text">✨ صلي على النبي ﷺ ✨</string>
+    <string name="salawat_card_title">تذكير: صلي على النبي ﷺ</string>
+    <string name="salawat_card_subtitle">يصلك إشعار دوري لتذكيرك بالصلاة على النبي أثناء مذاكرتك ويومك.</string>
+    <string name="salawat_toggle_label">تفعيل الإشعار الدوري</string>
+    <string name="salawat_interval_label">التكرار كل:</string>
+    <string name="salawat_interval_15">١٥ دقيقة</string>
+    <string name="salawat_interval_30">٣٠ دقيقة</string>
+    <string name="salawat_interval_60">ساعة</string>
+    <string name="salawat_test_button">اختبار الإشعار الآن</string>
+    <string name="salawat_notif_channel_name">تذكير الصلاة على النبي</string>
+    <string name="salawat_notif_title">صلي على النبي ﷺ</string>
+    <string name="salawat_notif_body">اللهم صلِّ وسلم وبارك على نبينا محمد ﷺ — رطّب لسانك بالصلاة على النبي</string>
+    <string name="salawat_permission_needed">اسمح بالإشعارات لتصلك تنبيهات «صلي على النبي ﷺ» الدورية.</string>
+
     <!-- Navigation Tabs -->
     <string name="tab_focus">التركيز</string>
     <string name="tab_audio">الأصوات</string>
@@ -39,6 +55,15 @@
     <string name="cancel_session_dialog_body">سيتم إيقاف الحظر وحفظ وقت المذاكرة الفعلي الذي أنجزته حتى الآن.</string>
     <string name="cancel_session_confirm">نعم، إنهاء</string>
     <string name="cancel_session_dismiss">متابعة المذاكرة</string>
+
+    <!-- Allowed Apps Confirmation Dialog -->
+    <string name="confirm_apps_title">تأكيد التطبيقات المسموحة</string>
+    <string name="confirm_apps_duration">مدة الجلسة: %1$s</string>
+    <string name="confirm_apps_list_header">التطبيقات المسموح بفتحها (%1$d):</string>
+    <string name="confirm_apps_none">لم تختر أي تطبيق إضافي — ستكون تطبيقات النظام الأساسية فقط مسموحة.</string>
+    <string name="confirm_apps_lock_warning">بعد التأكيد، ستُقفل قائمة التطبيقات المسموحة ولن يمكنك تعديلها حتى تنتهي الجلسة أو تُلغى.</string>
+    <string name="confirm_apps_ok">تأكيد وبدء الجلسة</string>
+    <string name="confirm_apps_review">مراجعة التطبيقات</string>
 
     <!-- Duration Hours + Minutes -->
     <string name="section_duration_title">مدة جلسة المذاكرة</string>

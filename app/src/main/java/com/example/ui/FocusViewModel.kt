@@ -12,6 +12,7 @@ import com.example.data.InstalledApp
 import com.example.data.PlantedTree
 import com.example.data.SelectedAudioSource
 import com.example.data.UploadedAudioTrack
+import com.example.notifications.SalawatReminderScheduler
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -49,9 +50,12 @@ data class FocusUiState(
     val sessionEndMs: Long = 0L,
     val sessionDurationMs: Long = 0L,
     val remainingMs: Long = 0L,
+    val showStartConfirmDialog: Boolean = false,
     val showCancelSessionDialog: Boolean = false,
     val isFullScreenTimerVisible: Boolean = false,
     val autoOpenFullscreenTimer: Boolean = false,
+    val salawatEnabled: Boolean = true,
+    val salawatIntervalMinutes: Int = 15,
     val dailyStudyMs: Long = 0L,
     val totalStudyMs: Long = 0L,
     val unplantedStudyMs: Long = 0L,
@@ -75,6 +79,9 @@ data class FocusUiState(
 
     val allTasksCompleted: Boolean
         get() = dailyTasks.isNotEmpty() && dailyTasks.all { it.isCompleted }
+
+    val selectedAllowedApps: List<InstalledApp>
+        get() = installedApps.filter { it.packageName in allowedPackages }
 
     val selectedAudioSource: SelectedAudioSource
         get() {
@@ -149,6 +156,8 @@ class FocusViewModel @JvmOverloads constructor(
         val volume = repository.getAudioVolume()
         val loop = repository.isAudioLoopEnabled()
         val autoFullscreen = repository.isAutoFullscreenTimerEnabled()
+        val salawatEnabled = repository.isSalawatReminderEnabled()
+        val salawatInterval = repository.getSalawatIntervalMinutes()
         val remaining = (snapshot.sessionEndMs - now).coerceAtLeast(0L)
 
         _uiState.update { state ->
@@ -172,8 +181,14 @@ class FocusViewModel @JvmOverloads constructor(
                 selectedUploadedTrackId = uploadedId,
                 audioVolume = volume,
                 audioLoopEnabled = loop,
-                autoOpenFullscreenTimer = autoFullscreen
+                autoOpenFullscreenTimer = autoFullscreen,
+                salawatEnabled = salawatEnabled,
+                salawatIntervalMinutes = salawatInterval
             )
+        }
+
+        if (salawatEnabled) {
+            SalawatReminderScheduler.scheduleNext(getApplication(), salawatInterval)
         }
 
         checkHoursAchievement(snapshot.dailyStudyMs, now)
@@ -356,27 +371,50 @@ class FocusViewModel @JvmOverloads constructor(
                 _events.tryEmit(FocusUiEvent.OpenAccessibilitySettings)
             }
             else -> {
-                val now = System.currentTimeMillis()
-                val (endMs, durationMs) = repository.startSession(
-                    allowedPackages = _uiState.value.allowedPackages,
-                    durationMinutes = totalMinutes,
-                    nowMs = now
-                )
-                val openFullScreen = _uiState.value.autoOpenFullscreenTimer
-                _uiState.update { state ->
-                    state.copy(
-                        sessionEndMs = endMs,
-                        sessionDurationMs = durationMs,
-                        remainingMs = (endMs - now).coerceAtLeast(0L),
-                        isFullScreenTimerVisible = openFullScreen
-                    )
-                }
-                startTicker(endMs)
-                _events.tryEmit(FocusUiEvent.ShowMessage(R.string.msg_session_started))
-                if (!openFullScreen) {
-                    _events.tryEmit(FocusUiEvent.NavigateHome)
-                }
+                _uiState.update { it.copy(showStartConfirmDialog = true) }
             }
+        }
+    }
+
+    fun dismissStartConfirmDialog() {
+        _uiState.update { it.copy(showStartConfirmDialog = false) }
+    }
+
+    fun confirmStartSession() {
+        val state = _uiState.value
+        if (state.isSessionActive) return
+        val hours = state.hoursInput.toLongOrNull() ?: 0L
+        val minutes = state.minutesInput.toLongOrNull() ?: 0L
+        val totalMinutes = hours * 60L + minutes
+        if (totalMinutes <= 0L) {
+            _uiState.update { it.copy(showStartConfirmDialog = false) }
+            _events.tryEmit(FocusUiEvent.ShowMessage(R.string.msg_invalid_duration))
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        val (endMs, durationMs) = repository.startSession(
+            allowedPackages = state.allowedPackages,
+            durationMinutes = totalMinutes,
+            nowMs = now
+        )
+        val openFullScreen = state.autoOpenFullscreenTimer
+        _uiState.update {
+            it.copy(
+                showStartConfirmDialog = false,
+                sessionEndMs = endMs,
+                sessionDurationMs = durationMs,
+                remainingMs = (endMs - now).coerceAtLeast(0L),
+                isFullScreenTimerVisible = openFullScreen
+            )
+        }
+        startTicker(endMs)
+        if (state.salawatEnabled) {
+            SalawatReminderScheduler.scheduleNext(getApplication(), state.salawatIntervalMinutes)
+        }
+        _events.tryEmit(FocusUiEvent.ShowMessage(R.string.msg_session_started))
+        if (!openFullScreen) {
+            _events.tryEmit(FocusUiEvent.NavigateHome)
         }
     }
 
@@ -411,6 +449,32 @@ class FocusViewModel @JvmOverloads constructor(
         }
         checkHoursAchievement(snapshot.dailyStudyMs, now)
         _events.tryEmit(FocusUiEvent.ShowMessage(R.string.msg_session_cancelled))
+    }
+
+    // Salawat Periodic Reminder
+    fun onSalawatEnabledChange(enabled: Boolean) {
+        repository.saveSalawatReminderEnabled(enabled)
+        _uiState.update { it.copy(salawatEnabled = enabled) }
+        if (enabled) {
+            SalawatReminderScheduler.scheduleNext(getApplication(), _uiState.value.salawatIntervalMinutes)
+        } else {
+            SalawatReminderScheduler.cancel(getApplication())
+        }
+    }
+
+    fun onSalawatIntervalChange(minutes: Int) {
+        repository.saveSalawatIntervalMinutes(minutes)
+        _uiState.update { it.copy(salawatIntervalMinutes = minutes) }
+        if (_uiState.value.salawatEnabled) {
+            SalawatReminderScheduler.scheduleNext(getApplication(), minutes)
+        }
+    }
+
+    fun onTestSalawatNotificationClick() {
+        val posted = SalawatReminderScheduler.showSalawatNotification(getApplication())
+        if (!posted) {
+            _events.tryEmit(FocusUiEvent.RequestNotificationPermission)
+        }
     }
 
     // Daily Task Tracker

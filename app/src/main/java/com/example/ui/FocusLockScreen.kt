@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -37,8 +38,10 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Park
 import androidx.compose.material.icons.filled.PlayArrow
@@ -59,6 +62,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -123,9 +127,14 @@ fun FocusLockScreen(
     onSelectAllFiltered: () -> Unit,
     onClearAllFiltered: () -> Unit,
     onStartSessionClick: () -> Unit,
+    onDismissStartConfirm: () -> Unit,
+    onConfirmStartSession: () -> Unit,
     onRequestCancelSession: () -> Unit,
     onDismissCancelSession: () -> Unit,
     onConfirmCancelSession: () -> Unit,
+    onSalawatEnabledChange: (Boolean) -> Unit,
+    onSalawatIntervalChange: (Int) -> Unit,
+    onTestSalawatClick: () -> Unit,
     onNewTaskInputChange: (String) -> Unit,
     onAddTaskClick: () -> Unit,
     onToggleTask: (String) -> Unit,
@@ -140,6 +149,17 @@ fun FocusLockScreen(
     onToggleAudioPlayback: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    if (uiState.showStartConfirmDialog) {
+        ConfirmAllowedAppsDialog(
+            hours = uiState.hoursInput.toLongOrNull() ?: 0L,
+            minutes = uiState.minutesInput.toLongOrNull() ?: 0L,
+            selectedApps = uiState.selectedAllowedApps,
+            allowedCount = uiState.allowedPackages.size,
+            onConfirm = onConfirmStartSession,
+            onDismiss = onDismissStartConfirm
+        )
+    }
+
     if (uiState.showCancelSessionDialog) {
         AlertDialog(
             onDismissRequest = onDismissCancelSession,
@@ -242,13 +262,18 @@ fun FocusLockScreen(
                             MainTab.FOCUS -> {
                                 FocusSessionTabContent(
                                     uiState = uiState,
+                                    needsNotificationPermission = needsNotificationPermission,
                                     showInlineActionButton = useNavRail,
+                                    onRequestNotificationPermission = onRequestNotificationPermission,
                                     onEditNameClick = onEditNameClick,
                                     onEnableServiceClick = onEnableServiceClick,
                                     onHoursInputChange = onHoursInputChange,
                                     onMinutesInputChange = onMinutesInputChange,
                                     onAutoFullscreenChange = onAutoFullscreenChange,
                                     onOpenFullScreenTimer = onOpenFullScreenTimer,
+                                    onSalawatEnabledChange = onSalawatEnabledChange,
+                                    onSalawatIntervalChange = onSalawatIntervalChange,
+                                    onTestSalawatClick = onTestSalawatClick,
                                     onSearchQueryChange = onSearchQueryChange,
                                     onToggleApp = onToggleApp,
                                     onSelectAllFiltered = onSelectAllFiltered,
@@ -297,6 +322,145 @@ fun FocusLockScreen(
             }
         }
     }
+}
+
+@Composable
+private fun ConfirmAllowedAppsDialog(
+    hours: Long,
+    minutes: Long,
+    selectedApps: List<InstalledApp>,
+    allowedCount: Int,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val totalMs = (hours * 60L + minutes) * 60_000L
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Filled.Lock,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
+        title = {
+            Text(
+                text = stringResource(R.string.confirm_apps_title),
+                style = MaterialTheme.typography.titleLarge
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Text(
+                        text = stringResource(
+                            R.string.confirm_apps_duration,
+                            formatDurationArabic(totalMs)
+                        ),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
+                }
+
+                Text(
+                    text = stringResource(R.string.confirm_apps_list_header, allowedCount),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                if (selectedApps.isEmpty()) {
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Text(
+                            text = stringResource(R.string.confirm_apps_none),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(items = selectedApps, key = { it.packageName }) { app ->
+                            Surface(
+                                shape = MaterialTheme.shapes.small,
+                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    if (app.icon != null) {
+                                        Image(
+                                            bitmap = app.icon,
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .size(26.dp)
+                                                .clip(RoundedCornerShape(6.dp))
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Filled.CheckCircle,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.tertiary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = app.label,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Text(
+                    text = stringResource(R.string.confirm_apps_lock_warning),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                modifier = Modifier.testTag("confirm_start_session_button")
+            ) {
+                Text(stringResource(R.string.confirm_apps_ok))
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("review_apps_button")
+            ) {
+                Text(stringResource(R.string.confirm_apps_review))
+            }
+        }
+    )
 }
 
 @Composable
@@ -493,13 +657,18 @@ private fun FocusNavigationRail(
 @Composable
 private fun FocusSessionTabContent(
     uiState: FocusUiState,
+    needsNotificationPermission: Boolean,
     showInlineActionButton: Boolean,
+    onRequestNotificationPermission: () -> Unit,
     onEditNameClick: () -> Unit,
     onEnableServiceClick: () -> Unit,
     onHoursInputChange: (String) -> Unit,
     onMinutesInputChange: (String) -> Unit,
     onAutoFullscreenChange: (Boolean) -> Unit,
     onOpenFullScreenTimer: () -> Unit,
+    onSalawatEnabledChange: (Boolean) -> Unit,
+    onSalawatIntervalChange: (Int) -> Unit,
+    onTestSalawatClick: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onToggleApp: (String) -> Unit,
     onSelectAllFiltered: () -> Unit,
@@ -528,6 +697,15 @@ private fun FocusSessionTabContent(
                         uiState = uiState,
                         onEditNameClick = onEditNameClick,
                         onOpenFullScreenTimer = onOpenFullScreenTimer
+                    )
+                    SalawatReminderCard(
+                        enabled = uiState.salawatEnabled,
+                        intervalMinutes = uiState.salawatIntervalMinutes,
+                        needsNotificationPermission = needsNotificationPermission,
+                        onRequestNotificationPermission = onRequestNotificationPermission,
+                        onEnabledChange = onSalawatEnabledChange,
+                        onIntervalChange = onSalawatIntervalChange,
+                        onTestClick = onTestSalawatClick
                     )
                     AccessibilityStatusCard(
                         isEnabled = uiState.isServiceEnabled,
@@ -586,6 +764,17 @@ private fun FocusSessionTabContent(
                         uiState = uiState,
                         onEditNameClick = onEditNameClick,
                         onOpenFullScreenTimer = onOpenFullScreenTimer
+                    )
+                }
+                item(key = "salawat_card") {
+                    SalawatReminderCard(
+                        enabled = uiState.salawatEnabled,
+                        intervalMinutes = uiState.salawatIntervalMinutes,
+                        needsNotificationPermission = needsNotificationPermission,
+                        onRequestNotificationPermission = onRequestNotificationPermission,
+                        onEnabledChange = onSalawatEnabledChange,
+                        onIntervalChange = onSalawatIntervalChange,
+                        onTestClick = onTestSalawatClick
                     )
                 }
                 item(key = "service_status") {
@@ -703,6 +892,22 @@ private fun FocusHeroCard(
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Salawat banner inside the app hero
+                Surface(
+                    shape = CircleShape,
+                    color = Color(0xFF34D399).copy(alpha = 0.18f),
+                    border = BorderStroke(1.dp, Color(0xFF6EE7B7).copy(alpha = 0.55f)),
+                    modifier = Modifier.testTag("hero_salawat_banner")
+                ) {
+                    Text(
+                        text = stringResource(R.string.salawat_banner_text),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFA7F3D0),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    )
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -912,6 +1117,148 @@ private fun FocusHeroCard(
                     modifier = Modifier.fillMaxWidth(),
                     textColor = Color(0xFFCBD5E1)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SalawatReminderCard(
+    enabled: Boolean,
+    intervalMinutes: Int,
+    needsNotificationPermission: Boolean,
+    onRequestNotificationPermission: () -> Unit,
+    onEnabledChange: (Boolean) -> Unit,
+    onIntervalChange: (Int) -> Unit,
+    onTestClick: () -> Unit
+) {
+    Card(
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.45f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("salawat_reminder_card")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Filled.Favorite,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.salawat_card_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = stringResource(R.string.salawat_card_subtitle),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = onEnabledChange,
+                    modifier = Modifier.testTag("salawat_enabled_switch")
+                )
+            }
+
+            if (needsNotificationPermission && enabled) {
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.secondaryContainer
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.NotificationsActive,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.salawat_permission_needed),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(
+                            onClick = onRequestNotificationPermission,
+                            modifier = Modifier.minimumInteractiveComponentSize()
+                        ) {
+                            Text(stringResource(R.string.audio_permission_grant))
+                        }
+                    }
+                }
+            }
+
+            if (enabled) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.salawat_interval_label),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    listOf(
+                        15 to R.string.salawat_interval_15,
+                        30 to R.string.salawat_interval_30,
+                        60 to R.string.salawat_interval_60
+                    ).forEach { (mins, labelRes) ->
+                        FilterChip(
+                            selected = intervalMinutes == mins,
+                            onClick = { onIntervalChange(mins) },
+                            label = { Text(stringResource(labelRes)) },
+                            modifier = Modifier.minimumInteractiveComponentSize()
+                        )
+                    }
+                }
+
+                OutlinedButton(
+                    onClick = onTestClick,
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .minimumInteractiveComponentSize()
+                        .testTag("salawat_test_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.NotificationsActive,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.salawat_test_button))
+                }
             }
         }
     }
