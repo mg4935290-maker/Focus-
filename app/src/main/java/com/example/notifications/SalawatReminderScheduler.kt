@@ -15,24 +15,17 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.example.MainActivity
 import com.example.R
-import com.example.data.FocusRepository
 
 class SalawatReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        val prefs = context.getSharedPreferences(FocusRepository.PREFS_NAME, Context.MODE_PRIVATE)
-        val enabled = prefs.getBoolean(FocusRepository.KEY_SALAWAT_ENABLED, true)
-        if (!enabled) return
-
         SalawatReminderScheduler.showSalawatNotification(context)
-
-        val intervalMinutes = prefs.getInt(FocusRepository.KEY_SALAWAT_INTERVAL_MIN, 15)
-            .coerceIn(5, 180)
-        SalawatReminderScheduler.scheduleNext(context, intervalMinutes)
+        SalawatReminderScheduler.scheduleNext(context)
     }
 }
 
 object SalawatReminderScheduler {
 
+    const val AUTO_INTERVAL_MINUTES = 15
     private const val CHANNEL_ID = "salawat_reminder_channel"
     private const val NOTIFICATION_ID = 5201
     private const val REQUEST_CODE = 5202
@@ -87,20 +80,27 @@ object SalawatReminderScheduler {
         return true
     }
 
-    fun scheduleNext(context: Context, intervalMinutes: Int) {
+    fun scheduleIfNeeded(context: Context) {
+        val existing = PendingIntent.getBroadcast(
+            context,
+            REQUEST_CODE,
+            Intent(context, SalawatReminderReceiver::class.java),
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        )
+        if (existing == null) {
+            scheduleNext(context)
+        }
+    }
+
+    fun scheduleNext(context: Context) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
-        val triggerAt = SystemClock.elapsedRealtime() + intervalMinutes.coerceIn(5, 180) * 60_000L
+        val triggerAt = SystemClock.elapsedRealtime() + AUTO_INTERVAL_MINUTES * 60_000L
         val pendingIntent = buildPendingIntent(context)
         alarmManager.setAndAllowWhileIdle(
             AlarmManager.ELAPSED_REALTIME_WAKEUP,
             triggerAt,
             pendingIntent
         )
-    }
-
-    fun cancel(context: Context) {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
-        alarmManager.cancel(buildPendingIntent(context))
     }
 
     private fun buildPendingIntent(context: Context): PendingIntent {

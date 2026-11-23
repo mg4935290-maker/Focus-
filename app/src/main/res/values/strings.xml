@@ -5,21 +5,23 @@
     <string name="app_subtitle">مساحتك الهادئة للمذاكرة والإنجاز</string>
     <string name="created_by_galileo">created by Galileo</string>
 
-    <!-- Salawat Reminder -->
+    <!-- Salawat Automatic Reminder -->
     <string name="salawat_phrase">صلي على النبي ﷺ</string>
     <string name="salawat_banner_text">✨ صلي على النبي ﷺ ✨</string>
-    <string name="salawat_card_title">تذكير: صلي على النبي ﷺ</string>
-    <string name="salawat_card_subtitle">يصلك إشعار دوري لتذكيرك بالصلاة على النبي أثناء مذاكرتك ويومك.</string>
-    <string name="salawat_toggle_label">تفعيل الإشعار الدوري</string>
-    <string name="salawat_interval_label">التكرار كل:</string>
-    <string name="salawat_interval_15">١٥ دقيقة</string>
-    <string name="salawat_interval_30">٣٠ دقيقة</string>
-    <string name="salawat_interval_60">ساعة</string>
-    <string name="salawat_test_button">اختبار الإشعار الآن</string>
     <string name="salawat_notif_channel_name">تذكير الصلاة على النبي</string>
     <string name="salawat_notif_title">صلي على النبي ﷺ</string>
     <string name="salawat_notif_body">اللهم صلِّ وسلم وبارك على نبينا محمد ﷺ — رطّب لسانك بالصلاة على النبي</string>
-    <string name="salawat_permission_needed">اسمح بالإشعارات لتصلك تنبيهات «صلي على النبي ﷺ» الدورية.</string>
+    <string name="salawat_permission_needed">اسمح بالإشعارات ليصلك تذكير «صلي على النبي ﷺ» تلقائياً.</string>
+
+    <!-- Home Statistics -->
+    <string name="home_stats_title">الإحصائيات</string>
+    <string name="stat_today_study_label">مذاكرة اليوم</string>
+    <string name="stat_total_study_label">إجمالي المذاكرة</string>
+    <string name="stat_trees_label">الأشجار المزروعة</string>
+    <string name="stat_tasks_label">المهام المنجزة</string>
+    <string name="stat_trees_value">%1$d شجرة</string>
+    <string name="stat_tasks_value">%1$d / %2$d</string>
+    <string name="stat_next_tree_hint">القادمة: %1$d / 60 د</string>
 
     <!-- Navigation Tabs -->
     <string name="tab_focus">التركيز</string>
@@ -80,6 +82,10 @@
     <string name="search_apps_hint">ابحث عن تطبيق…</string>
     <string name="action_select_all">تحديد الكل</string>
     <string name="action_clear_all">إلغاء الكل</string>
+    <string name="action_confirm_apps">تأكيد</string>
+    <string name="allowed_apps_confirmed_badge">تم التأكيد</string>
+    <string name="allowed_apps_confirm_hint">بعد اختيار التطبيقات اضغط «تأكيد» لحفظ اختيارك.</string>
+    <string name="msg_allowed_apps_confirmed">تم تأكيد التطبيقات المسموحة</string>
     <string name="empty_apps_title">لا توجد تطبيقات مطابقة</string>
     <string name="empty_apps_subtitle">جرّب البحث باسم مختلف أو امسح حقل البحث.</string>
 

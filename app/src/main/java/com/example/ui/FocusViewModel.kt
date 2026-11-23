@@ -43,6 +43,7 @@ data class FocusUiState(
     val isLoadingApps: Boolean = true,
     val installedApps: List<InstalledApp> = emptyList(),
     val allowedPackages: Set<String> = emptySet(),
+    val isAppsSelectionConfirmed: Boolean = false,
     val searchQuery: String = "",
     val hoursInput: String = "1",
     val minutesInput: String = "0",
@@ -54,8 +55,6 @@ data class FocusUiState(
     val showCancelSessionDialog: Boolean = false,
     val isFullScreenTimerVisible: Boolean = false,
     val autoOpenFullscreenTimer: Boolean = false,
-    val salawatEnabled: Boolean = true,
-    val salawatIntervalMinutes: Int = 15,
     val dailyStudyMs: Long = 0L,
     val totalStudyMs: Long = 0L,
     val unplantedStudyMs: Long = 0L,
@@ -156,8 +155,6 @@ class FocusViewModel @JvmOverloads constructor(
         val volume = repository.getAudioVolume()
         val loop = repository.isAudioLoopEnabled()
         val autoFullscreen = repository.isAutoFullscreenTimerEnabled()
-        val salawatEnabled = repository.isSalawatReminderEnabled()
-        val salawatInterval = repository.getSalawatIntervalMinutes()
         val remaining = (snapshot.sessionEndMs - now).coerceAtLeast(0L)
 
         _uiState.update { state ->
@@ -181,15 +178,11 @@ class FocusViewModel @JvmOverloads constructor(
                 selectedUploadedTrackId = uploadedId,
                 audioVolume = volume,
                 audioLoopEnabled = loop,
-                autoOpenFullscreenTimer = autoFullscreen,
-                salawatEnabled = salawatEnabled,
-                salawatIntervalMinutes = salawatInterval
+                autoOpenFullscreenTimer = autoFullscreen
             )
         }
 
-        if (salawatEnabled) {
-            SalawatReminderScheduler.scheduleNext(getApplication(), salawatInterval)
-        }
+        SalawatReminderScheduler.scheduleIfNeeded(getApplication())
 
         checkHoursAchievement(snapshot.dailyStudyMs, now)
 
@@ -296,7 +289,7 @@ class FocusViewModel @JvmOverloads constructor(
         _uiState.update { state ->
             val updated = state.allowedPackages.toMutableSet()
             if (packageName in updated) updated.remove(packageName) else updated.add(packageName)
-            state.copy(allowedPackages = updated)
+            state.copy(allowedPackages = updated, isAppsSelectionConfirmed = false)
         }
     }
 
@@ -305,7 +298,7 @@ class FocusViewModel @JvmOverloads constructor(
         _uiState.update { state ->
             val updated = state.allowedPackages.toMutableSet()
             state.filteredApps.forEach { updated.add(it.packageName) }
-            state.copy(allowedPackages = updated)
+            state.copy(allowedPackages = updated, isAppsSelectionConfirmed = false)
         }
     }
 
@@ -314,8 +307,15 @@ class FocusViewModel @JvmOverloads constructor(
         _uiState.update { state ->
             val updated = state.allowedPackages.toMutableSet()
             state.filteredApps.forEach { updated.remove(it.packageName) }
-            state.copy(allowedPackages = updated)
+            state.copy(allowedPackages = updated, isAppsSelectionConfirmed = false)
         }
+    }
+
+    fun confirmAllowedAppsSelection() {
+        if (_uiState.value.isSessionActive) return
+        repository.saveAllowedPackages(_uiState.value.allowedPackages)
+        _uiState.update { it.copy(isAppsSelectionConfirmed = true) }
+        _events.tryEmit(FocusUiEvent.ShowMessage(R.string.msg_allowed_apps_confirmed))
     }
 
     fun onSearchQueryChange(query: String) {
@@ -370,8 +370,11 @@ class FocusViewModel @JvmOverloads constructor(
                 _events.tryEmit(FocusUiEvent.ShowMessage(R.string.msg_enable_service_first))
                 _events.tryEmit(FocusUiEvent.OpenAccessibilitySettings)
             }
-            else -> {
+            !_uiState.value.isAppsSelectionConfirmed -> {
                 _uiState.update { it.copy(showStartConfirmDialog = true) }
+            }
+            else -> {
+                confirmStartSession()
             }
         }
     }
@@ -402,6 +405,7 @@ class FocusViewModel @JvmOverloads constructor(
         _uiState.update {
             it.copy(
                 showStartConfirmDialog = false,
+                isAppsSelectionConfirmed = true,
                 sessionEndMs = endMs,
                 sessionDurationMs = durationMs,
                 remainingMs = (endMs - now).coerceAtLeast(0L),
@@ -409,9 +413,7 @@ class FocusViewModel @JvmOverloads constructor(
             )
         }
         startTicker(endMs)
-        if (state.salawatEnabled) {
-            SalawatReminderScheduler.scheduleNext(getApplication(), state.salawatIntervalMinutes)
-        }
+        SalawatReminderScheduler.scheduleIfNeeded(getApplication())
         _events.tryEmit(FocusUiEvent.ShowMessage(R.string.msg_session_started))
         if (!openFullScreen) {
             _events.tryEmit(FocusUiEvent.NavigateHome)
@@ -449,32 +451,6 @@ class FocusViewModel @JvmOverloads constructor(
         }
         checkHoursAchievement(snapshot.dailyStudyMs, now)
         _events.tryEmit(FocusUiEvent.ShowMessage(R.string.msg_session_cancelled))
-    }
-
-    // Salawat Periodic Reminder
-    fun onSalawatEnabledChange(enabled: Boolean) {
-        repository.saveSalawatReminderEnabled(enabled)
-        _uiState.update { it.copy(salawatEnabled = enabled) }
-        if (enabled) {
-            SalawatReminderScheduler.scheduleNext(getApplication(), _uiState.value.salawatIntervalMinutes)
-        } else {
-            SalawatReminderScheduler.cancel(getApplication())
-        }
-    }
-
-    fun onSalawatIntervalChange(minutes: Int) {
-        repository.saveSalawatIntervalMinutes(minutes)
-        _uiState.update { it.copy(salawatIntervalMinutes = minutes) }
-        if (_uiState.value.salawatEnabled) {
-            SalawatReminderScheduler.scheduleNext(getApplication(), minutes)
-        }
-    }
-
-    fun onTestSalawatNotificationClick() {
-        val posted = SalawatReminderScheduler.showSalawatNotification(getApplication())
-        if (!posted) {
-            _events.tryEmit(FocusUiEvent.RequestNotificationPermission)
-        }
     }
 
     // Daily Task Tracker

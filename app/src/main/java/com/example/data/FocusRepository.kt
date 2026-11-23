@@ -127,6 +127,12 @@ class FocusRepository(private val context: Context) {
         return prefs.getStringSet(KEY_ALLOWED, emptySet())?.toSet() ?: emptySet()
     }
 
+    fun saveAllowedPackages(allowedPackages: Set<String>) {
+        prefs.edit()
+            .putStringSet(KEY_ALLOWED, allowedPackages.toSet())
+            .apply()
+    }
+
     fun getSessionEndMs(): Long {
         return prefs.getLong(KEY_END, 0L)
     }
@@ -437,22 +443,6 @@ class FocusRepository(private val context: Context) {
         prefs.edit().putBoolean(KEY_AUTO_FULLSCREEN_TIMER, enabled).apply()
     }
 
-    fun isSalawatReminderEnabled(): Boolean {
-        return prefs.getBoolean(KEY_SALAWAT_ENABLED, true)
-    }
-
-    fun saveSalawatReminderEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_SALAWAT_ENABLED, enabled).apply()
-    }
-
-    fun getSalawatIntervalMinutes(): Int {
-        return prefs.getInt(KEY_SALAWAT_INTERVAL_MIN, 15).coerceIn(5, 180)
-    }
-
-    fun saveSalawatIntervalMinutes(minutes: Int) {
-        prefs.edit().putInt(KEY_SALAWAT_INTERVAL_MIN, minutes.coerceIn(5, 180)).apply()
-    }
-
     fun isBlockerServiceEnabled(): Boolean {
         val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager
         val expectedComponent = ComponentName(context, BlockerService::class.java)
@@ -500,8 +490,6 @@ class FocusRepository(private val context: Context) {
         const val KEY_AUDIO_VOLUME = "audio_volume"
         const val KEY_AUDIO_LOOP = "audio_loop"
         const val KEY_AUTO_FULLSCREEN_TIMER = "auto_fullscreen_timer"
-        const val KEY_SALAWAT_ENABLED = "salawat_enabled"
-        const val KEY_SALAWAT_INTERVAL_MIN = "salawat_interval_minutes"
 
         const val ONE_HOUR_MS = 60L * 60_000L
         const val FOUR_HOURS_MS = 4L * ONE_HOUR_MS

@@ -43,12 +43,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.FocusRepository
 import com.example.ui.CreatedByGalileoFooter
 import com.example.ui.theme.MyApplicationTheme
+import java.lang.ref.WeakReference
 
 class BlockedActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        activeInstance = WeakReference(this)
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
@@ -59,7 +63,36 @@ class BlockedActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        activeInstance = WeakReference(this)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        isForeground = true
+        val prefs = getSharedPreferences(FocusRepository.PREFS_NAME, MODE_PRIVATE)
+        if (System.currentTimeMillis() >= prefs.getLong(FocusRepository.KEY_END, 0L)) {
+            finish()
+        }
+    }
+
+    override fun onPause() {
+        isForeground = false
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        if (activeInstance?.get() === this) {
+            activeInstance = null
+        }
+        isForeground = false
+        super.onDestroy()
+    }
+
     private fun returnToFocusLock() {
+        isForeground = false
         val intent = Intent(this, MainActivity::class.java).apply {
             addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -70,6 +103,24 @@ class BlockedActivity : ComponentActivity() {
         startActivity(intent)
         finish()
     }
+
+    companion object {
+        @Volatile
+        var isForeground: Boolean = false
+            private set
+
+        @Volatile
+        private var activeInstance: WeakReference<BlockedActivity>? = null
+
+        fun dismissIfOpen() {
+            val activity = activeInstance?.get() ?: return
+            activity.runOnUiThread {
+                if (!activity.isFinishing && !activity.isDestroyed) {
+                    activity.finish()
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -77,8 +128,11 @@ fun BlockedAppScreen(
     onReturnToStudy: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    BackHandler {
-        onReturnToStudy()
+    // Keep the blocked message visible while the user remains inside the blocked app;
+    // pressing Back will not reveal the blocked app underneath.
+    BackHandler(enabled = true) {
+        // Intentionally stay on the blocked screen until the user exits the blocked app
+        // or taps "الرجوع للمذاكرة".
     }
 
     val calmGradient = Brush.verticalGradient(

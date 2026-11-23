@@ -42,7 +42,8 @@
             android:name=".BlockedActivity"
             android:excludeFromRecents="true"
             android:exported="false"
-            android:launchMode="singleTop"
+            android:launchMode="singleInstance"
+            android:taskAffinity="com.example.blocked"
             android:theme="@style/Theme.MyApplication" />
 
         <service

@@ -34,17 +34,19 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Park
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SettingsAccessibility
 import androidx.compose.material.icons.filled.Stop
@@ -62,7 +64,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -126,15 +127,13 @@ fun FocusLockScreen(
     onToggleApp: (String) -> Unit,
     onSelectAllFiltered: () -> Unit,
     onClearAllFiltered: () -> Unit,
+    onConfirmAllowedApps: () -> Unit,
     onStartSessionClick: () -> Unit,
     onDismissStartConfirm: () -> Unit,
     onConfirmStartSession: () -> Unit,
     onRequestCancelSession: () -> Unit,
     onDismissCancelSession: () -> Unit,
     onConfirmCancelSession: () -> Unit,
-    onSalawatEnabledChange: (Boolean) -> Unit,
-    onSalawatIntervalChange: (Int) -> Unit,
-    onTestSalawatClick: () -> Unit,
     onNewTaskInputChange: (String) -> Unit,
     onAddTaskClick: () -> Unit,
     onToggleTask: (String) -> Unit,
@@ -271,13 +270,11 @@ fun FocusLockScreen(
                                     onMinutesInputChange = onMinutesInputChange,
                                     onAutoFullscreenChange = onAutoFullscreenChange,
                                     onOpenFullScreenTimer = onOpenFullScreenTimer,
-                                    onSalawatEnabledChange = onSalawatEnabledChange,
-                                    onSalawatIntervalChange = onSalawatIntervalChange,
-                                    onTestSalawatClick = onTestSalawatClick,
                                     onSearchQueryChange = onSearchQueryChange,
                                     onToggleApp = onToggleApp,
                                     onSelectAllFiltered = onSelectAllFiltered,
                                     onClearAllFiltered = onClearAllFiltered,
+                                    onConfirmAllowedApps = onConfirmAllowedApps,
                                     onStartSessionClick = onStartSessionClick,
                                     onCancelSessionClick = onRequestCancelSession
                                 )
@@ -666,13 +663,11 @@ private fun FocusSessionTabContent(
     onMinutesInputChange: (String) -> Unit,
     onAutoFullscreenChange: (Boolean) -> Unit,
     onOpenFullScreenTimer: () -> Unit,
-    onSalawatEnabledChange: (Boolean) -> Unit,
-    onSalawatIntervalChange: (Int) -> Unit,
-    onTestSalawatClick: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onToggleApp: (String) -> Unit,
     onSelectAllFiltered: () -> Unit,
     onClearAllFiltered: () -> Unit,
+    onConfirmAllowedApps: () -> Unit,
     onStartSessionClick: () -> Unit,
     onCancelSessionClick: () -> Unit
 ) {
@@ -698,15 +693,12 @@ private fun FocusSessionTabContent(
                         onEditNameClick = onEditNameClick,
                         onOpenFullScreenTimer = onOpenFullScreenTimer
                     )
-                    SalawatReminderCard(
-                        enabled = uiState.salawatEnabled,
-                        intervalMinutes = uiState.salawatIntervalMinutes,
-                        needsNotificationPermission = needsNotificationPermission,
-                        onRequestNotificationPermission = onRequestNotificationPermission,
-                        onEnabledChange = onSalawatEnabledChange,
-                        onIntervalChange = onSalawatIntervalChange,
-                        onTestClick = onTestSalawatClick
-                    )
+                    HomeStatsCard(uiState = uiState)
+                    if (needsNotificationPermission) {
+                        NotificationPermissionBanner(
+                            onRequestNotificationPermission = onRequestNotificationPermission
+                        )
+                    }
                     AccessibilityStatusCard(
                         isEnabled = uiState.isServiceEnabled,
                         onEnableClick = onEnableServiceClick
@@ -738,10 +730,12 @@ private fun FocusSessionTabContent(
                     AllowedAppsHeader(
                         allowedCount = uiState.allowedPackages.size,
                         isLocked = uiState.isSessionActive,
+                        isSelectionConfirmed = uiState.isAppsSelectionConfirmed,
                         searchQuery = uiState.searchQuery,
                         onSearchQueryChange = onSearchQueryChange,
                         onSelectAll = onSelectAllFiltered,
-                        onClearAll = onClearAllFiltered
+                        onClearAll = onClearAllFiltered,
+                        onConfirmApps = onConfirmAllowedApps
                     )
                     AllowedAppsListContainer(
                         isLoading = uiState.isLoadingApps,
@@ -766,16 +760,15 @@ private fun FocusSessionTabContent(
                         onOpenFullScreenTimer = onOpenFullScreenTimer
                     )
                 }
-                item(key = "salawat_card") {
-                    SalawatReminderCard(
-                        enabled = uiState.salawatEnabled,
-                        intervalMinutes = uiState.salawatIntervalMinutes,
-                        needsNotificationPermission = needsNotificationPermission,
-                        onRequestNotificationPermission = onRequestNotificationPermission,
-                        onEnabledChange = onSalawatEnabledChange,
-                        onIntervalChange = onSalawatIntervalChange,
-                        onTestClick = onTestSalawatClick
-                    )
+                item(key = "home_stats") {
+                    HomeStatsCard(uiState = uiState)
+                }
+                if (needsNotificationPermission) {
+                    item(key = "notif_permission") {
+                        NotificationPermissionBanner(
+                            onRequestNotificationPermission = onRequestNotificationPermission
+                        )
+                    }
                 }
                 item(key = "service_status") {
                     AccessibilityStatusCard(
@@ -798,10 +791,12 @@ private fun FocusSessionTabContent(
                     AllowedAppsHeader(
                         allowedCount = uiState.allowedPackages.size,
                         isLocked = uiState.isSessionActive,
+                        isSelectionConfirmed = uiState.isAppsSelectionConfirmed,
                         searchQuery = uiState.searchQuery,
                         onSearchQueryChange = onSearchQueryChange,
                         onSelectAll = onSelectAllFiltered,
-                        onClearAll = onClearAllFiltered
+                        onClearAll = onClearAllFiltered,
+                        onConfirmApps = onConfirmAllowedApps
                     )
                 }
 
@@ -1123,142 +1118,194 @@ private fun FocusHeroCard(
 }
 
 @Composable
-private fun SalawatReminderCard(
-    enabled: Boolean,
-    intervalMinutes: Int,
-    needsNotificationPermission: Boolean,
-    onRequestNotificationPermission: () -> Unit,
-    onEnabledChange: (Boolean) -> Unit,
-    onIntervalChange: (Int) -> Unit,
-    onTestClick: () -> Unit
-) {
+private fun HomeStatsCard(uiState: FocusUiState) {
+    val unplantedMinutes = (uiState.unplantedStudyMs / 60_000L).toInt().coerceIn(0, 59)
+
     Card(
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.45f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("salawat_reminder_card")
+            .testTag("home_stats_card")
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Filled.Favorite,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.salawat_card_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = stringResource(R.string.salawat_card_subtitle),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = enabled,
-                    onCheckedChange = onEnabledChange,
-                    modifier = Modifier.testTag("salawat_enabled_switch")
+                Icon(
+                    imageVector = Icons.Filled.BarChart,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = stringResource(R.string.home_stats_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
-            if (needsNotificationPermission && enabled) {
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.secondaryContainer
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.NotificationsActive,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            text = stringResource(R.string.salawat_permission_needed),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(
-                            onClick = onRequestNotificationPermission,
-                            modifier = Modifier.minimumInteractiveComponentSize()
-                        ) {
-                            Text(stringResource(R.string.audio_permission_grant))
-                        }
-                    }
-                }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                HomeStatTile(
+                    icon = Icons.Filled.Schedule,
+                    label = stringResource(R.string.stat_today_study_label),
+                    value = formatDurationArabic(uiState.dailyStudyMs),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("stat_today_study")
+                )
+                HomeStatTile(
+                    icon = Icons.Filled.History,
+                    label = stringResource(R.string.stat_total_study_label),
+                    value = formatDurationArabic(uiState.totalStudyMs),
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("stat_total_study")
+                )
             }
 
-            if (enabled) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.salawat_interval_label),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    listOf(
-                        15 to R.string.salawat_interval_15,
-                        30 to R.string.salawat_interval_30,
-                        60 to R.string.salawat_interval_60
-                    ).forEach { (mins, labelRes) ->
-                        FilterChip(
-                            selected = intervalMinutes == mins,
-                            onClick = { onIntervalChange(mins) },
-                            label = { Text(stringResource(labelRes)) },
-                            modifier = Modifier.minimumInteractiveComponentSize()
-                        )
-                    }
-                }
-
-                OutlinedButton(
-                    onClick = onTestClick,
-                    shape = MaterialTheme.shapes.small,
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                HomeStatTile(
+                    icon = Icons.Filled.Park,
+                    label = stringResource(R.string.stat_trees_label),
+                    value = stringResource(R.string.stat_trees_value, uiState.plantedTrees.size),
+                    subtitle = stringResource(R.string.stat_next_tree_hint, unplantedMinutes),
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f),
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .minimumInteractiveComponentSize()
-                        .testTag("salawat_test_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.NotificationsActive,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.salawat_test_button))
-                }
+                        .weight(1f)
+                        .testTag("stat_trees_count")
+                )
+                HomeStatTile(
+                    icon = Icons.Filled.TaskAlt,
+                    label = stringResource(R.string.stat_tasks_label),
+                    value = stringResource(
+                        R.string.stat_tasks_value,
+                        uiState.completedTasksCount,
+                        uiState.dailyTasks.size
+                    ),
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("stat_tasks_count")
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeStatTile(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    containerColor: Color,
+    contentColor: Color,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null
+) {
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = containerColor,
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = contentColor.copy(alpha = 0.85f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = contentColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = contentColor.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotificationPermissionBanner(
+    onRequestNotificationPermission: () -> Unit
+) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("notification_permission_banner")
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.NotificationsActive,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = stringResource(R.string.salawat_permission_needed),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(
+                onClick = onRequestNotificationPermission,
+                modifier = Modifier.minimumInteractiveComponentSize()
+            ) {
+                Text(stringResource(R.string.audio_permission_grant))
             }
         }
     }
@@ -1472,10 +1519,12 @@ private fun DurationSelectorCard(
 private fun AllowedAppsHeader(
     allowedCount: Int,
     isLocked: Boolean,
+    isSelectionConfirmed: Boolean,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onSelectAll: () -> Unit,
-    onClearAll: () -> Unit
+    onClearAll: () -> Unit,
+    onConfirmApps: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
@@ -1499,16 +1548,36 @@ private fun AllowedAppsHeader(
                 )
             }
 
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.tertiaryContainer
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text(
-                    text = stringResource(R.string.allowed_count_badge, allowedCount),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                )
+                if (!isLocked && isSelectionConfirmed) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = StudySuccessGreen.copy(alpha = 0.16f),
+                        border = BorderStroke(1.dp, StudySuccessGreen.copy(alpha = 0.5f)),
+                        modifier = Modifier.testTag("apps_confirmed_badge")
+                    ) {
+                        Text(
+                            text = stringResource(R.string.allowed_apps_confirmed_badge),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = StudySuccessGreen,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.tertiaryContainer
+                ) {
+                    Text(
+                        text = stringResource(R.string.allowed_count_badge, allowedCount),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
             }
         }
 
@@ -1573,26 +1642,63 @@ private fun AllowedAppsHeader(
         if (!isLocked) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(
-                    onClick = onSelectAll,
+                Button(
+                    onClick = onConfirmApps,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isSelectionConfirmed) {
+                            StudySuccessGreen
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                        contentColor = Color.White
+                    ),
+                    shape = MaterialTheme.shapes.small,
                     modifier = Modifier
                         .minimumInteractiveComponentSize()
-                        .testTag("select_all_apps_button")
+                        .testTag("confirm_apps_button")
                 ) {
-                    Text(stringResource(R.string.action_select_all))
+                    Icon(
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.action_confirm_apps),
+                        fontWeight = FontWeight.Bold
+                    )
                 }
-                Spacer(Modifier.width(4.dp))
-                TextButton(
-                    onClick = onClearAll,
-                    modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .testTag("clear_all_apps_button")
-                ) {
-                    Text(stringResource(R.string.action_clear_all))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(
+                        onClick = onSelectAll,
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("select_all_apps_button")
+                    ) {
+                        Text(stringResource(R.string.action_select_all))
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    TextButton(
+                        onClick = onClearAll,
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("clear_all_apps_button")
+                    ) {
+                        Text(stringResource(R.string.action_clear_all))
+                    }
                 }
+            }
+
+            if (!isSelectionConfirmed) {
+                Text(
+                    text = stringResource(R.string.allowed_apps_confirm_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

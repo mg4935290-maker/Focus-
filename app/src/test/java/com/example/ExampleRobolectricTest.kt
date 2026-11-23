@@ -35,22 +35,20 @@ class ExampleRobolectricTest {
         assertEquals("تفعيل خدمة الحظر", context.getString(R.string.btn_enable_service))
         assertEquals("ابدأ الجلسة", context.getString(R.string.btn_start_session))
         assertEquals("صلي على النبي ﷺ", context.getString(R.string.salawat_phrase))
+        assertEquals("تأكيد", context.getString(R.string.action_confirm_apps))
+        assertEquals("الإحصائيات", context.getString(R.string.home_stats_title))
         assertEquals("تأكيد التطبيقات المسموحة", context.getString(R.string.confirm_apps_title))
     }
 
     @Test
-    fun `salawat reminder preferences persist`() {
+    fun `allowed packages confirmation persists independently of starting session`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val repo = FocusRepository(context)
+        val selection = setOf("com.example.reader", "com.example.notes")
 
-        assertTrue(repo.isSalawatReminderEnabled())
-        assertEquals(15, repo.getSalawatIntervalMinutes())
-
-        repo.saveSalawatReminderEnabled(false)
-        repo.saveSalawatIntervalMinutes(30)
-
-        assertFalse(repo.isSalawatReminderEnabled())
-        assertEquals(30, repo.getSalawatIntervalMinutes())
+        repo.saveAllowedPackages(selection)
+        assertEquals(selection, repo.getAllowedPackages())
+        assertEquals(15, com.example.notifications.SalawatReminderScheduler.AUTO_INTERVAL_MINUTES)
     }
 
     @Test
