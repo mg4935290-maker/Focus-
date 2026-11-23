@@ -1,0 +1,91 @@
+<resources>
+    <string name="app_name">Focus Lock</string>
+    <string name="service_desc">يمنع فتح التطبيقات غير المسموحة أثناء جلسة التركيز</string>
+
+    <string name="app_subtitle">مساحتك الهادئة للمذاكرة والإنجاز</string>
+    <string name="created_by_galileo">created by Galileo</string>
+
+    <string name="tab_focus">التركيز والحظر</string>
+    <string name="tab_tasks_reward">المهام والمكافأة</string>
+
+    <string name="welcome_title">مرحباً بك في رحلة المذاكرة</string>
+    <string name="welcome_subtitle">اكتب اسمك لنجهّز لك بيئة تركيز هادئة بعيداً عن المشتتات.</string>
+    <string name="welcome_name_label">اكتب اسمك</string>
+    <string name="welcome_name_hint">مثال: أحمد، سارة…</string>
+    <string name="welcome_name_error">من فضلك اكتب اسمك أولاً</string>
+    <string name="welcome_continue_button">ابدأ المذاكرة الآن</string>
+    <string name="welcome_save_name_button">حفظ الاسم والمتابعة</string>
+    <string name="welcome_quote">كل دقيقة تركيز اليوم هي خطوة واثقة نحو هدفك.</string>
+
+    <string name="greeting_user_study">أهلاً يا %1$s — وقت المذاكرة والإنجاز!</string>
+    <string name="cd_edit_name">تعديل الاسم</string>
+
+    <string name="service_status_active">خدمة الحظر مفعّلة وجاهزة</string>
+    <string name="service_status_inactive">خدمة الحظر غير مفعّلة</string>
+    <string name="service_hint_inactive">فعّل خدمة إمكانية الوصول ليتمكن التطبيق من إرجاعك للشاشة الرئيسية عند فتح تطبيق مشتت.</string>
+    <string name="service_hint_active">يمكنك الآن بدء جلسة المذاكرة وسيتم حظر التطبيقات غير المسموحة تلقائياً.</string>
+
+    <string name="btn_enable_service">1) تفعيل خدمة الحظر</string>
+    <string name="btn_service_settings">إعدادات الخدمة</string>
+    <string name="btn_start_session">2) ابدأ الجلسة</string>
+    <string name="btn_update_session">تحديث الجلسة الجارية</string>
+
+    <string name="section_duration_title">مدة جلسة المذاكرة</string>
+    <string name="hint_duration_minutes">المدة بالدقائق</string>
+    <string name="unit_minutes_short">د</string>
+    <string name="unit_minutes">دقيقة</string>
+
+    <string name="section_allowed_apps_title">اختر التطبيقات المسموحة:</string>
+    <string name="allowed_count_badge">المسموح: %1$d</string>
+    <string name="search_apps_hint">ابحث عن تطبيق…</string>
+    <string name="action_select_all">تحديد الكل</string>
+    <string name="action_clear_all">إلغاء الكل</string>
+    <string name="empty_apps_title">لا توجد تطبيقات مطابقة</string>
+    <string name="empty_apps_subtitle">جرّب البحث باسم مختلف أو امسح حقل البحث.</string>
+
+    <string name="session_active_title">جلسة المذاكرة نشطة الآن</string>
+    <string name="session_idle_title">استعد لجلسة مذاكرة عميقة</string>
+    <string name="session_idle_subtitle">حدّد المدة واختر التطبيقات المساعدة للمذاكرة فقط.</string>
+    <string name="session_remaining_label">الوقت المتبقي</string>
+    <string name="session_end_time_label">تنتهي عند %1$s</string>
+    <string name="session_allowed_summary">التطبيقات المسموحة: %1$d • تطبيقات النظام الأساسية مسموحة دائماً</string>
+
+    <string name="msg_invalid_duration">اكتب مدة صحيحة</string>
+    <string name="msg_enable_service_first">فعّل الخدمة أولاً</string>
+    <string name="msg_session_started">بدأت جلسة المذاكرة لمدة %1$d دقيقة</string>
+
+    <!-- Daily Tasks & 1-Hour Reward -->
+    <string name="daily_tasks_title">متتابع المهام اليومي</string>
+    <string name="daily_tasks_progress">%1$d من %2$d مكتملة</string>
+    <string name="daily_tasks_input_hint">اكتب مهمة جديدة لليوم…</string>
+    <string name="daily_tasks_add_button">إضافة</string>
+    <string name="daily_tasks_empty_title">لا توجد مهام ليومك بعد</string>
+    <string name="daily_tasks_empty_subtitle">أضف مهام المذاكرة الخاصة بك بالأعلى، وعند إتمامها جميعاً ستحصل على مكافأة ساعة كاملة لتطبيقك المفضّل!</string>
+    <string name="cd_delete_task">حذف المهمة</string>
+
+    <string name="reward_card_title">مكافأة اليوم (ساعة كاملة)</string>
+    <string name="reward_app_not_selected">لم تختر تطبيق المكافأة بعد</string>
+    <string name="reward_selected_app">تطبيق المكافأة: %1$s</string>
+    <string name="reward_choose_app">اختيار التطبيق</string>
+    <string name="reward_change_app">تغيير التطبيق</string>
+    <string name="reward_picker_title">اختر تطبيق المكافأة اليومية</string>
+    <string name="reward_picker_close">إغلاق</string>
+
+    <string name="reward_status_locked_no_tasks">أضف مهام اليوم وأكملها جميعاً لفتح ساعة المكافأة.</string>
+    <string name="reward_status_locked_incomplete">تبقّى %1$d مهمة لإتمام جميع مهام اليوم وفتح المكافأة.</string>
+    <string name="reward_status_locked_pick_app">أكملت كل المهام! اختر تطبيق المكافأة لتستمتع بساعتك اليومية.</string>
+    <string name="reward_status_ready">أحسنت! أكملت جميع مهام اليوم — يمكنك الآن استلام ساعة كاملة.</string>
+    <string name="reward_status_active">المكافأة نشطة! هذا التطبيق مسموح به حتى انتهاء الساعة.</string>
+    <string name="reward_status_claimed_today">استمتعت بساعة مكافأة اليوم — تتجدد المكافأة غداً!</string>
+    <string name="reward_remaining_time">الوقت المتبقي للمكافأة: %1$s</string>
+    <string name="reward_claim_button">استلام مكافأة الساعة (60 دقيقة)</string>
+    <string name="reward_open_app_button">فتح تطبيق المكافأة</string>
+    <string name="msg_reward_claimed">تم تفعيل مكافأة ساعة كاملة لتطبيق %1$s!</string>
+    <string name="msg_reward_pick_app_first">اختر تطبيق المكافأة أولاً</string>
+    <string name="msg_reward_app_launch_error">تعذّر فتح التطبيق المحدد</string>
+
+    <string name="cd_hero_banner">خلفية جلسة المذاكرة</string>
+    <string name="cd_app_icon">أيقونة %1$s</string>
+    <string name="cd_clear_search">مسح البحث</string>
+    <string name="cd_service_status_icon">حالة خدمة الحظر</string>
+</resources>
