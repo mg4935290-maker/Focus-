@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -38,23 +36,29 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.OpenInFull
+import androidx.compose.material.icons.filled.Park
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SettingsAccessibility
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.Park
 import androidx.compose.material.icons.outlined.TaskAlt
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -68,6 +72,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -75,6 +80,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -86,9 +92,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.data.BuiltInSound
 import com.example.data.InstalledApp
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.StudySuccessGreen
@@ -96,34 +104,82 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private val DURATION_PRESETS = listOf(15, 25, 45, 60, 90)
-
 @Composable
 fun FocusLockScreen(
     uiState: FocusUiState,
     snackbarHostState: SnackbarHostState,
+    needsNotificationPermission: Boolean,
+    onRequestNotificationPermission: () -> Unit,
     onSelectTab: (MainTab) -> Unit,
     onEditNameClick: () -> Unit,
     onEnableServiceClick: () -> Unit,
-    onDurationInputChange: (String) -> Unit,
-    onSelectPresetMinutes: (Int) -> Unit,
+    onHoursInputChange: (String) -> Unit,
+    onMinutesInputChange: (String) -> Unit,
+    onAutoFullscreenChange: (Boolean) -> Unit,
+    onOpenFullScreenTimer: () -> Unit,
+    onCloseFullScreenTimer: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onToggleApp: (String) -> Unit,
     onSelectAllFiltered: () -> Unit,
     onClearAllFiltered: () -> Unit,
     onStartSessionClick: () -> Unit,
+    onRequestCancelSession: () -> Unit,
+    onDismissCancelSession: () -> Unit,
+    onConfirmCancelSession: () -> Unit,
     onNewTaskInputChange: (String) -> Unit,
     onAddTaskClick: () -> Unit,
     onToggleTask: (String) -> Unit,
     onDeleteTask: (String) -> Unit,
-    onOpenRewardPicker: () -> Unit,
-    onDismissRewardPicker: () -> Unit,
-    onRewardSearchChange: (String) -> Unit,
-    onSelectRewardApp: (String) -> Unit,
-    onClaimRewardClick: () -> Unit,
-    onOpenRewardAppClick: () -> Unit,
+    onDismissAchievement: () -> Unit,
+    onSelectBuiltInSound: (BuiltInSound) -> Unit,
+    onSelectUploadedTrack: (String) -> Unit,
+    onUploadAudioClick: () -> Unit,
+    onDeleteUploadedTrack: (String) -> Unit,
+    onAudioVolumeChange: (Float) -> Unit,
+    onAudioLoopToggle: (Boolean) -> Unit,
+    onToggleAudioPlayback: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    if (uiState.showCancelSessionDialog) {
+        AlertDialog(
+            onDismissRequest = onDismissCancelSession,
+            title = { Text(stringResource(R.string.cancel_session_dialog_title)) },
+            text = { Text(stringResource(R.string.cancel_session_dialog_body)) },
+            confirmButton = {
+                Button(
+                    onClick = onConfirmCancelSession,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) {
+                    Text(stringResource(R.string.cancel_session_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissCancelSession) {
+                    Text(stringResource(R.string.cancel_session_dismiss))
+                }
+            }
+        )
+    }
+
+    uiState.achievementReasonResId?.let { reasonRes ->
+        AchievementCelebrationDialog(
+            reasonResId = reasonRes,
+            onDismiss = onDismissAchievement
+        )
+    }
+
+    if (uiState.isFullScreenTimerVisible && uiState.isSessionActive) {
+        FullScreenTimerScreen(
+            uiState = uiState,
+            onToggleAudioPlayback = onToggleAudioPlayback,
+            onExitFullScreen = onCloseFullScreenTimer
+        )
+        return
+    }
+
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val useNavRail = maxWidth >= 840.dp
 
@@ -136,9 +192,10 @@ fun FocusLockScreen(
                 if (!useNavRail) {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         if (uiState.selectedTab == MainTab.FOCUS) {
-                            BottomStartSessionPanel(
+                            BottomSessionActionPanel(
                                 isSessionActive = uiState.isSessionActive,
-                                onStartSessionClick = onStartSessionClick
+                                onStartSessionClick = onStartSessionClick,
+                                onCancelSessionClick = onRequestCancelSession
                             )
                         }
                         Surface(
@@ -171,38 +228,60 @@ fun FocusLockScreen(
                     )
                 }
 
-                Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
                         when (uiState.selectedTab) {
                             MainTab.FOCUS -> {
                                 FocusSessionTabContent(
                                     uiState = uiState,
-                                    showInlineStartButton = useNavRail,
+                                    showInlineActionButton = useNavRail,
                                     onEditNameClick = onEditNameClick,
                                     onEnableServiceClick = onEnableServiceClick,
-                                    onDurationInputChange = onDurationInputChange,
-                                    onSelectPresetMinutes = onSelectPresetMinutes,
+                                    onHoursInputChange = onHoursInputChange,
+                                    onMinutesInputChange = onMinutesInputChange,
+                                    onAutoFullscreenChange = onAutoFullscreenChange,
+                                    onOpenFullScreenTimer = onOpenFullScreenTimer,
                                     onSearchQueryChange = onSearchQueryChange,
                                     onToggleApp = onToggleApp,
                                     onSelectAllFiltered = onSelectAllFiltered,
                                     onClearAllFiltered = onClearAllFiltered,
-                                    onStartSessionClick = onStartSessionClick
+                                    onStartSessionClick = onStartSessionClick,
+                                    onCancelSessionClick = onRequestCancelSession
                                 )
                             }
-                            MainTab.TASKS_REWARD -> {
+                            MainTab.AUDIO -> {
+                                AudioTabContent(
+                                    uiState = uiState,
+                                    needsNotificationPermission = needsNotificationPermission,
+                                    onRequestNotificationPermission = onRequestNotificationPermission,
+                                    onSelectBuiltInSound = onSelectBuiltInSound,
+                                    onSelectUploadedTrack = onSelectUploadedTrack,
+                                    onUploadAudioClick = onUploadAudioClick,
+                                    onDeleteUploadedTrack = onDeleteUploadedTrack,
+                                    onVolumeChange = onAudioVolumeChange,
+                                    onLoopToggle = onAudioLoopToggle,
+                                    onTogglePlayback = onToggleAudioPlayback
+                                )
+                            }
+                            MainTab.TASKS -> {
                                 DailyTasksTabContent(
                                     uiState = uiState,
                                     onNewTaskInputChange = onNewTaskInputChange,
                                     onAddTaskClick = onAddTaskClick,
                                     onToggleTask = onToggleTask,
-                                    onDeleteTask = onDeleteTask,
-                                    onOpenRewardPicker = onOpenRewardPicker,
-                                    onDismissRewardPicker = onDismissRewardPicker,
-                                    onRewardSearchChange = onRewardSearchChange,
-                                    onSelectRewardApp = onSelectRewardApp,
-                                    onClaimRewardClick = onClaimRewardClick,
-                                    onOpenRewardAppClick = onOpenRewardAppClick
+                                    onDeleteTask = onDeleteTask
                                 )
+                            }
+                            MainTab.FARM -> {
+                                TreeFarmTabContent(uiState = uiState)
                             }
                         }
                     }
@@ -221,6 +300,72 @@ fun FocusLockScreen(
 }
 
 @Composable
+private fun AchievementCelebrationDialog(
+    reasonResId: Int,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                modifier = Modifier.size(64.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Filled.EmojiEvents,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+            }
+        },
+        title = {
+            Text(
+                text = stringResource(R.string.achievement_title),
+                style = MaterialTheme.typography.titleLarge,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.achievement_message),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.testTag("achievement_message_text")
+                )
+                Text(
+                    text = stringResource(reasonResId),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("achievement_dismiss_button")
+            ) {
+                Text(stringResource(R.string.achievement_ok_button))
+            }
+        }
+    )
+}
+
+@Composable
 private fun FocusBottomNavigationBar(
     selectedTab: MainTab,
     onSelectTab: (MainTab) -> Unit
@@ -235,24 +380,48 @@ private fun FocusBottomNavigationBar(
                     contentDescription = null
                 )
             },
-            label = { Text(stringResource(R.string.tab_focus)) },
+            label = { Text(stringResource(R.string.tab_focus), maxLines = 1) },
             modifier = Modifier.testTag("nav_tab_focus")
         )
         NavigationBarItem(
-            selected = selectedTab == MainTab.TASKS_REWARD,
-            onClick = { onSelectTab(MainTab.TASKS_REWARD) },
+            selected = selectedTab == MainTab.AUDIO,
+            onClick = { onSelectTab(MainTab.AUDIO) },
             icon = {
                 Icon(
-                    imageVector = if (selectedTab == MainTab.TASKS_REWARD) {
-                        Icons.Filled.TaskAlt
+                    imageVector = if (selectedTab == MainTab.AUDIO) {
+                        Icons.Filled.MusicNote
                     } else {
-                        Icons.Outlined.TaskAlt
+                        Icons.Outlined.MusicNote
                     },
                     contentDescription = null
                 )
             },
-            label = { Text(stringResource(R.string.tab_tasks_reward)) },
-            modifier = Modifier.testTag("nav_tab_tasks_reward")
+            label = { Text(stringResource(R.string.tab_audio), maxLines = 1) },
+            modifier = Modifier.testTag("nav_tab_audio")
+        )
+        NavigationBarItem(
+            selected = selectedTab == MainTab.TASKS,
+            onClick = { onSelectTab(MainTab.TASKS) },
+            icon = {
+                Icon(
+                    imageVector = if (selectedTab == MainTab.TASKS) Icons.Filled.TaskAlt else Icons.Outlined.TaskAlt,
+                    contentDescription = null
+                )
+            },
+            label = { Text(stringResource(R.string.tab_tasks), maxLines = 1) },
+            modifier = Modifier.testTag("nav_tab_tasks")
+        )
+        NavigationBarItem(
+            selected = selectedTab == MainTab.FARM,
+            onClick = { onSelectTab(MainTab.FARM) },
+            icon = {
+                Icon(
+                    imageVector = if (selectedTab == MainTab.FARM) Icons.Filled.Park else Icons.Outlined.Park,
+                    contentDescription = null
+                )
+            },
+            label = { Text(stringResource(R.string.tab_farm), maxLines = 1) },
+            modifier = Modifier.testTag("nav_tab_farm")
         )
     }
 }
@@ -279,20 +448,44 @@ private fun FocusNavigationRail(
             modifier = Modifier.testTag("rail_tab_focus")
         )
         NavigationRailItem(
-            selected = selectedTab == MainTab.TASKS_REWARD,
-            onClick = { onSelectTab(MainTab.TASKS_REWARD) },
+            selected = selectedTab == MainTab.AUDIO,
+            onClick = { onSelectTab(MainTab.AUDIO) },
             icon = {
                 Icon(
-                    imageVector = if (selectedTab == MainTab.TASKS_REWARD) {
-                        Icons.Filled.TaskAlt
+                    imageVector = if (selectedTab == MainTab.AUDIO) {
+                        Icons.Filled.MusicNote
                     } else {
-                        Icons.Outlined.TaskAlt
+                        Icons.Outlined.MusicNote
                     },
                     contentDescription = null
                 )
             },
-            label = { Text(stringResource(R.string.tab_tasks_reward)) },
-            modifier = Modifier.testTag("rail_tab_tasks_reward")
+            label = { Text(stringResource(R.string.tab_audio)) },
+            modifier = Modifier.testTag("rail_tab_audio")
+        )
+        NavigationRailItem(
+            selected = selectedTab == MainTab.TASKS,
+            onClick = { onSelectTab(MainTab.TASKS) },
+            icon = {
+                Icon(
+                    imageVector = if (selectedTab == MainTab.TASKS) Icons.Filled.TaskAlt else Icons.Outlined.TaskAlt,
+                    contentDescription = null
+                )
+            },
+            label = { Text(stringResource(R.string.tab_tasks)) },
+            modifier = Modifier.testTag("rail_tab_tasks")
+        )
+        NavigationRailItem(
+            selected = selectedTab == MainTab.FARM,
+            onClick = { onSelectTab(MainTab.FARM) },
+            icon = {
+                Icon(
+                    imageVector = if (selectedTab == MainTab.FARM) Icons.Filled.Park else Icons.Outlined.Park,
+                    contentDescription = null
+                )
+            },
+            label = { Text(stringResource(R.string.tab_farm)) },
+            modifier = Modifier.testTag("rail_tab_farm")
         )
     }
 }
@@ -300,16 +493,19 @@ private fun FocusNavigationRail(
 @Composable
 private fun FocusSessionTabContent(
     uiState: FocusUiState,
-    showInlineStartButton: Boolean,
+    showInlineActionButton: Boolean,
     onEditNameClick: () -> Unit,
     onEnableServiceClick: () -> Unit,
-    onDurationInputChange: (String) -> Unit,
-    onSelectPresetMinutes: (Int) -> Unit,
+    onHoursInputChange: (String) -> Unit,
+    onMinutesInputChange: (String) -> Unit,
+    onAutoFullscreenChange: (Boolean) -> Unit,
+    onOpenFullScreenTimer: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onToggleApp: (String) -> Unit,
     onSelectAllFiltered: () -> Unit,
     onClearAllFiltered: () -> Unit,
-    onStartSessionClick: () -> Unit
+    onStartSessionClick: () -> Unit,
+    onCancelSessionClick: () -> Unit
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isWideScreen = maxWidth >= 700.dp
@@ -330,21 +526,27 @@ private fun FocusSessionTabContent(
                 ) {
                     FocusHeroCard(
                         uiState = uiState,
-                        onEditNameClick = onEditNameClick
+                        onEditNameClick = onEditNameClick,
+                        onOpenFullScreenTimer = onOpenFullScreenTimer
                     )
                     AccessibilityStatusCard(
                         isEnabled = uiState.isServiceEnabled,
                         onEnableClick = onEnableServiceClick
                     )
                     DurationSelectorCard(
-                        durationInput = uiState.durationInput,
-                        onDurationInputChange = onDurationInputChange,
-                        onSelectPreset = onSelectPresetMinutes
+                        hoursInput = uiState.hoursInput,
+                        minutesInput = uiState.minutesInput,
+                        isSessionActive = uiState.isSessionActive,
+                        autoOpenFullscreenTimer = uiState.autoOpenFullscreenTimer,
+                        onHoursChange = onHoursInputChange,
+                        onMinutesChange = onMinutesInputChange,
+                        onAutoFullscreenChange = onAutoFullscreenChange
                     )
-                    if (showInlineStartButton) {
-                        StartSessionButton(
+                    if (showInlineActionButton) {
+                        SessionActionButton(
                             isSessionActive = uiState.isSessionActive,
-                            onStartSessionClick = onStartSessionClick
+                            onStartSessionClick = onStartSessionClick,
+                            onCancelSessionClick = onCancelSessionClick
                         )
                     }
                 }
@@ -357,6 +559,7 @@ private fun FocusSessionTabContent(
                 ) {
                     AllowedAppsHeader(
                         allowedCount = uiState.allowedPackages.size,
+                        isLocked = uiState.isSessionActive,
                         searchQuery = uiState.searchQuery,
                         onSearchQueryChange = onSearchQueryChange,
                         onSelectAll = onSelectAllFiltered,
@@ -366,6 +569,7 @@ private fun FocusSessionTabContent(
                         isLoading = uiState.isLoadingApps,
                         apps = uiState.filteredApps,
                         allowedPackages = uiState.allowedPackages,
+                        isLocked = uiState.isSessionActive,
                         onToggleApp = onToggleApp,
                         modifier = Modifier.weight(1f)
                     )
@@ -380,7 +584,8 @@ private fun FocusSessionTabContent(
                 item(key = "hero") {
                     FocusHeroCard(
                         uiState = uiState,
-                        onEditNameClick = onEditNameClick
+                        onEditNameClick = onEditNameClick,
+                        onOpenFullScreenTimer = onOpenFullScreenTimer
                     )
                 }
                 item(key = "service_status") {
@@ -391,14 +596,19 @@ private fun FocusSessionTabContent(
                 }
                 item(key = "duration") {
                     DurationSelectorCard(
-                        durationInput = uiState.durationInput,
-                        onDurationInputChange = onDurationInputChange,
-                        onSelectPreset = onSelectPresetMinutes
+                        hoursInput = uiState.hoursInput,
+                        minutesInput = uiState.minutesInput,
+                        isSessionActive = uiState.isSessionActive,
+                        autoOpenFullscreenTimer = uiState.autoOpenFullscreenTimer,
+                        onHoursChange = onHoursInputChange,
+                        onMinutesChange = onMinutesInputChange,
+                        onAutoFullscreenChange = onAutoFullscreenChange
                     )
                 }
                 item(key = "apps_header") {
                     AllowedAppsHeader(
                         allowedCount = uiState.allowedPackages.size,
+                        isLocked = uiState.isSessionActive,
                         searchQuery = uiState.searchQuery,
                         onSearchQueryChange = onSearchQueryChange,
                         onSelectAll = onSelectAllFiltered,
@@ -429,6 +639,7 @@ private fun FocusSessionTabContent(
                         AppAllowanceRow(
                             app = app,
                             isAllowed = app.packageName in uiState.allowedPackages,
+                            isLocked = uiState.isSessionActive,
                             onToggle = { onToggleApp(app.packageName) }
                         )
                     }
@@ -441,7 +652,8 @@ private fun FocusSessionTabContent(
 @Composable
 private fun FocusHeroCard(
     uiState: FocusUiState,
-    onEditNameClick: () -> Unit
+    onEditNameClick: () -> Unit,
+    onOpenFullScreenTimer: () -> Unit
 ) {
     val progress = remember(uiState.remainingMs, uiState.sessionDurationMs) {
         if (uiState.sessionDurationMs > 0L && uiState.remainingMs > 0L) {
@@ -573,64 +785,85 @@ private fun FocusHeroCard(
                     enter = fadeIn(),
                     exit = fadeOut()
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier.size(84.dp),
-                            contentAlignment = Alignment.Center
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            Canvas(modifier = Modifier.fillMaxSize()) {
-                                val strokeWidth = 7.dp.toPx()
-                                drawArc(
-                                    color = ringTrackColor,
-                                    startAngle = -90f,
-                                    sweepAngle = 360f,
-                                    useCenter = false,
-                                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                                )
-                                drawArc(
-                                    color = ringActiveColor,
-                                    startAngle = -90f,
-                                    sweepAngle = 360f * progress,
-                                    useCenter = false,
-                                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                            Box(
+                                modifier = Modifier.size(84.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Canvas(modifier = Modifier.fillMaxSize()) {
+                                    val strokeWidth = 7.dp.toPx()
+                                    drawArc(
+                                        color = ringTrackColor,
+                                        startAngle = -90f,
+                                        sweepAngle = 360f,
+                                        useCenter = false,
+                                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                                    )
+                                    drawArc(
+                                        color = ringActiveColor,
+                                        startAngle = -90f,
+                                        sweepAngle = 360f * progress,
+                                        useCenter = false,
+                                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.Filled.Timer,
+                                    contentDescription = null,
+                                    tint = ringAccentColor,
+                                    modifier = Modifier.size(26.dp)
                                 )
                             }
-                            Icon(
-                                imageVector = Icons.Filled.Timer,
-                                contentDescription = null,
-                                tint = ringAccentColor,
-                                modifier = Modifier.size(26.dp)
-                            )
+
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    text = stringResource(R.string.session_active_title),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = ringActiveColor
+                                )
+                                Text(
+                                    text = formatCountdown(uiState.remainingMs),
+                                    style = MaterialTheme.typography.displaySmall,
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    color = Color.White,
+                                    modifier = Modifier.testTag("countdown_timer_text")
+                                )
+                                val endFormatted = remember(uiState.sessionEndMs) {
+                                    SimpleDateFormat("hh:mm a", Locale.getDefault())
+                                        .format(Date(uiState.sessionEndMs))
+                                }
+                                Text(
+                                    text = stringResource(R.string.session_end_time_label, endFormatted),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFFCBD5E1)
+                                )
+                            }
                         }
 
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(
-                                text = stringResource(R.string.session_active_title),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = ringActiveColor
+                        OutlinedButton(
+                            onClick = onOpenFullScreenTimer,
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.45f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .minimumInteractiveComponentSize()
+                                .testTag("open_fullscreen_timer_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.OpenInFull,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
                             )
-                            Text(
-                                text = formatCountdown(uiState.remainingMs),
-                                style = MaterialTheme.typography.displaySmall,
-                                fontFamily = JetBrainsMonoFontFamily,
-                                color = Color.White,
-                                modifier = Modifier.testTag("countdown_timer_text")
-                            )
-                            val endFormatted = remember(uiState.sessionEndMs) {
-                                SimpleDateFormat("hh:mm a", Locale.getDefault())
-                                    .format(Date(uiState.sessionEndMs))
-                            }
-                            Text(
-                                text = stringResource(R.string.session_end_time_label, endFormatted),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFFCBD5E1)
-                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.fullscreen_timer_open_button))
                         }
                     }
                 }
@@ -650,14 +883,30 @@ private fun FocusHeroCard(
                     }
                 }
 
-                Text(
-                    text = stringResource(
-                        R.string.session_allowed_summary,
-                        uiState.allowedPackages.size
-                    ),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color(0xFFA7F3D0)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(
+                            R.string.today_study_badge,
+                            formatDurationArabic(uiState.dailyStudyMs)
+                        ),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFFFDE68A)
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.session_allowed_summary,
+                            uiState.allowedPackages.size
+                        ),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFFA7F3D0),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
 
                 CreatedByGalileoFooter(
                     modifier = Modifier.fillMaxWidth(),
@@ -771,12 +1020,15 @@ private fun AccessibilityStatusCard(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DurationSelectorCard(
-    durationInput: String,
-    onDurationInputChange: (String) -> Unit,
-    onSelectPreset: (Int) -> Unit
+    hoursInput: String,
+    minutesInput: String,
+    isSessionActive: Boolean,
+    autoOpenFullscreenTimer: Boolean,
+    onHoursChange: (String) -> Unit,
+    onMinutesChange: (String) -> Unit,
+    onAutoFullscreenChange: (Boolean) -> Unit
 ) {
     Card(
         shape = MaterialTheme.shapes.medium,
@@ -806,44 +1058,65 @@ private fun DurationSelectorCard(
                 )
             }
 
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                DURATION_PRESETS.forEach { preset ->
-                    val selected = durationInput == preset.toString()
-                    FilterChip(
-                        selected = selected,
-                        onClick = { onSelectPreset(preset) },
-                        label = {
-                            Text(
-                                text = "$preset ${stringResource(R.string.unit_minutes_short)}",
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ),
-                        modifier = Modifier
-                            .minimumInteractiveComponentSize()
-                            .testTag("duration_preset_$preset")
-                    )
-                }
+                OutlinedTextField(
+                    value = hoursInput,
+                    onValueChange = onHoursChange,
+                    enabled = !isSessionActive,
+                    label = { Text(stringResource(R.string.label_hours)) },
+                    suffix = { Text(stringResource(R.string.unit_hours)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("hours_input")
+                )
+
+                OutlinedTextField(
+                    value = minutesInput,
+                    onValueChange = onMinutesChange,
+                    enabled = !isSessionActive,
+                    label = { Text(stringResource(R.string.label_minutes)) },
+                    suffix = { Text(stringResource(R.string.unit_minutes)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("minutes_input")
+                )
             }
 
-            OutlinedTextField(
-                value = durationInput,
-                onValueChange = onDurationInputChange,
-                label = { Text(stringResource(R.string.hint_duration_minutes)) },
-                suffix = { Text(stringResource(R.string.unit_minutes)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                shape = MaterialTheme.shapes.small,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("duration_input")
-            )
+            if (isSessionActive) {
+                Text(
+                    text = stringResource(R.string.duration_locked_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = stringResource(R.string.fullscreen_timer_auto_label),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = autoOpenFullscreenTimer,
+                    onCheckedChange = onAutoFullscreenChange,
+                    modifier = Modifier.testTag("auto_fullscreen_switch")
+                )
+            }
         }
     }
 }
@@ -851,6 +1124,7 @@ private fun DurationSelectorCard(
 @Composable
 private fun AllowedAppsHeader(
     allowedCount: Int,
+    isLocked: Boolean,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onSelectAll: () -> Unit,
@@ -867,9 +1141,9 @@ private fun AllowedAppsHeader(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Apps,
+                    imageVector = if (isLocked) Icons.Filled.Lock else Icons.Filled.Apps,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = if (isLocked) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
                 )
                 Text(
                     text = stringResource(R.string.section_allowed_apps_title),
@@ -888,6 +1162,37 @@ private fun AllowedAppsHeader(
                     color = MaterialTheme.colorScheme.onTertiaryContainer,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 )
+            }
+        }
+
+        if (isLocked) {
+            Surface(
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("apps_locked_hint")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Lock,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.allowed_apps_locked_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
             }
         }
 
@@ -918,27 +1223,29 @@ private fun AllowedAppsHeader(
                 .testTag("app_search_input")
         )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(
-                onClick = onSelectAll,
-                modifier = Modifier
-                    .minimumInteractiveComponentSize()
-                    .testTag("select_all_apps_button")
+        if (!isLocked) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(stringResource(R.string.action_select_all))
-            }
-            Spacer(Modifier.width(4.dp))
-            TextButton(
-                onClick = onClearAll,
-                modifier = Modifier
-                    .minimumInteractiveComponentSize()
-                    .testTag("clear_all_apps_button")
-            ) {
-                Text(stringResource(R.string.action_clear_all))
+                TextButton(
+                    onClick = onSelectAll,
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .testTag("select_all_apps_button")
+                ) {
+                    Text(stringResource(R.string.action_select_all))
+                }
+                Spacer(Modifier.width(4.dp))
+                TextButton(
+                    onClick = onClearAll,
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .testTag("clear_all_apps_button")
+                ) {
+                    Text(stringResource(R.string.action_clear_all))
+                }
             }
         }
     }
@@ -949,6 +1256,7 @@ private fun AllowedAppsListContainer(
     isLoading: Boolean,
     apps: List<InstalledApp>,
     allowedPackages: Set<String>,
+    isLocked: Boolean,
     onToggleApp: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -976,6 +1284,7 @@ private fun AllowedAppsListContainer(
                 AppAllowanceRow(
                     app = app,
                     isAllowed = app.packageName in allowedPackages,
+                    isLocked = isLocked,
                     onToggle = { onToggleApp(app.packageName) }
                 )
             }
@@ -987,6 +1296,7 @@ private fun AllowedAppsListContainer(
 private fun AppAllowanceRow(
     app: InstalledApp,
     isAllowed: Boolean,
+    isLocked: Boolean,
     onToggle: () -> Unit
 ) {
     Surface(
@@ -1006,8 +1316,9 @@ private fun AppAllowanceRow(
         ),
         modifier = Modifier
             .fillMaxWidth()
+            .alpha(if (isLocked) 0.78f else 1f)
             .clip(MaterialTheme.shapes.medium)
-            .clickable(onClick = onToggle)
+            .clickable(enabled = !isLocked, onClick = onToggle)
             .testTag("app_row_${app.packageName}")
     ) {
         Row(
@@ -1061,7 +1372,8 @@ private fun AppAllowanceRow(
 
             Checkbox(
                 checked = isAllowed,
-                onCheckedChange = { onToggle() },
+                onCheckedChange = if (isLocked) null else { _ -> onToggle() },
+                enabled = !isLocked,
                 modifier = Modifier
                     .minimumInteractiveComponentSize()
                     .testTag("app_checkbox_${app.packageName}")
@@ -1105,9 +1417,10 @@ private fun EmptyAppsState() {
 }
 
 @Composable
-private fun BottomStartSessionPanel(
+private fun BottomSessionActionPanel(
     isSessionActive: Boolean,
-    onStartSessionClick: () -> Unit
+    onStartSessionClick: () -> Unit,
+    onCancelSessionClick: () -> Unit
 ) {
     Surface(
         tonalElevation = 4.dp,
@@ -1119,39 +1432,63 @@ private fun BottomStartSessionPanel(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 10.dp)
         ) {
-            StartSessionButton(
+            SessionActionButton(
                 isSessionActive = isSessionActive,
-                onStartSessionClick = onStartSessionClick
+                onStartSessionClick = onStartSessionClick,
+                onCancelSessionClick = onCancelSessionClick
             )
         }
     }
 }
 
 @Composable
-private fun StartSessionButton(
+private fun SessionActionButton(
     isSessionActive: Boolean,
-    onStartSessionClick: () -> Unit
+    onStartSessionClick: () -> Unit,
+    onCancelSessionClick: () -> Unit
 ) {
-    Button(
-        onClick = onStartSessionClick,
-        shape = MaterialTheme.shapes.medium,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(52.dp)
-            .testTag("start_session_button")
-    ) {
-        Icon(
-            imageVector = Icons.Filled.PlayArrow,
-            contentDescription = null,
-            modifier = Modifier.size(22.dp)
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = stringResource(
-                if (isSessionActive) R.string.btn_update_session else R.string.btn_start_session
-            ),
-            style = MaterialTheme.typography.titleMedium
-        )
+    if (isSessionActive) {
+        OutlinedButton(
+            onClick = onCancelSessionClick,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp)
+                .testTag("cancel_session_button")
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Stop,
+                contentDescription = null,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = stringResource(R.string.btn_cancel_session),
+                style = MaterialTheme.typography.titleMedium
+            )
+        }
+    } else {
+        Button(
+            onClick = onStartSessionClick,
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp)
+                .testTag("start_session_button")
+        ) {
+            Icon(
+                imageVector = Icons.Filled.PlayArrow,
+                contentDescription = null,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = stringResource(R.string.btn_start_session),
+                style = MaterialTheme.typography.titleMedium
+            )
+        }
     }
 }
 

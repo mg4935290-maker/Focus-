@@ -15,8 +15,10 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 data class InstalledApp(
     val packageName: String,
@@ -30,6 +32,47 @@ data class DailyTask(
     val isCompleted: Boolean
 )
 
+data class PlantedTree(
+    val id: String,
+    val plantedAtMs: Long,
+    val variant: Int
+)
+
+data class UploadedAudioTrack(
+    val id: String,
+    val uriString: String,
+    val displayName: String
+)
+
+enum class BuiltInSound(val id: String) {
+    RAIN("rain"),
+    WHITE_NOISE("white_noise"),
+    ALPHA("alpha"),
+    BETA("beta"),
+    GAMMA("gamma");
+
+    val isBinaural: Boolean
+        get() = this == ALPHA || this == BETA || this == GAMMA
+
+    companion object {
+        fun fromId(id: String?): BuiltInSound? = entries.firstOrNull { it.id == id }
+    }
+}
+
+sealed class SelectedAudioSource {
+    data class BuiltIn(val sound: BuiltInSound) : SelectedAudioSource()
+    data class Uploaded(val track: UploadedAudioTrack) : SelectedAudioSource()
+}
+
+data class StudyProgressSnapshot(
+    val dailyStudyMs: Long,
+    val totalStudyMs: Long,
+    val unplantedStudyMs: Long,
+    val trees: List<PlantedTree>,
+    val sessionEndMs: Long,
+    val sessionDurationMs: Long
+)
+
 class FocusRepository(private val context: Context) {
 
     private val prefs by lazy {
@@ -38,6 +81,17 @@ class FocusRepository(private val context: Context) {
 
     fun currentDateKey(nowMs: Long = System.currentTimeMillis()): String {
         return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(nowMs))
+    }
+
+    private fun startOfDayMs(nowMs: Long): Long {
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = nowMs
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        return cal.timeInMillis
     }
 
     suspend fun loadInstalledApps(): List<InstalledApp> = withContext(Dispatchers.IO) {
@@ -81,15 +135,192 @@ class FocusRepository(private val context: Context) {
         return prefs.getLong(KEY_DURATION_MS, 0L)
     }
 
-    fun startSession(allowedPackages: Set<String>, durationMinutes: Long): Pair<Long, Long> {
+    fun startSession(
+        allowedPackages: Set<String>,
+        durationMinutes: Long,
+        nowMs: Long = System.currentTimeMillis()
+    ): Pair<Long, Long> {
+        syncStudyProgress(nowMs)
         val durationMs = durationMinutes * 60_000L
-        val endMs = System.currentTimeMillis() + durationMs
-        prefs.edit()
+        val endMs = nowMs + durationMs
+        val todayKey = currentDateKey(nowMs)
+        val existingStudyDate = prefs.getString(KEY_STUDY_DATE, "") ?: ""
+        val editor = prefs.edit()
             .putStringSet(KEY_ALLOWED, allowedPackages.toSet())
             .putLong(KEY_END, endMs)
             .putLong(KEY_DURATION_MS, durationMs)
-            .apply()
+            .putLong(KEY_SESSION_START_MS, nowMs)
+            .putLong(KEY_LAST_ACCOUNTED_MS, nowMs)
+        if (existingStudyDate != todayKey) {
+            editor.putString(KEY_STUDY_DATE, todayKey)
+                .putLong(KEY_DAILY_STUDY_MS, 0L)
+        }
+        editor.apply()
         return endMs to durationMs
+    }
+
+    fun cancelSession(nowMs: Long = System.currentTimeMillis()): StudyProgressSnapshot {
+        syncStudyProgress(nowMs)
+        prefs.edit()
+            .putLong(KEY_END, 0L)
+            .putLong(KEY_DURATION_MS, 0L)
+            .putLong(KEY_SESSION_START_MS, 0L)
+            .putLong(KEY_LAST_ACCOUNTED_MS, 0L)
+            .apply()
+        return getStudyProgressSnapshot(nowMs)
+    }
+
+    @Synchronized
+    fun syncStudyProgress(nowMs: Long = System.currentTimeMillis()): StudyProgressSnapshot {
+        val todayKey = currentDateKey(nowMs)
+        val savedStudyDate = prefs.getString(KEY_STUDY_DATE, "") ?: ""
+        var dailyStudyMs = if (savedStudyDate == todayKey) {
+            prefs.getLong(KEY_DAILY_STUDY_MS, 0L)
+        } else {
+            0L
+        }
+        var totalStudyMs = prefs.getLong(KEY_TOTAL_STUDY_MS, 0L)
+        var unplantedStudyMs = prefs.getLong(KEY_UNPLANTED_STUDY_MS, 0L)
+        val trees = loadTrees().toMutableList()
+
+        val sessionStartMs = prefs.getLong(KEY_SESSION_START_MS, 0L)
+        val sessionEndMs = prefs.getLong(KEY_END, 0L)
+        val lastAccountedMs = prefs.getLong(KEY_LAST_ACCOUNTED_MS, 0L)
+            .coerceAtLeast(sessionStartMs)
+
+        var newSessionStartMs = sessionStartMs
+        var newSessionEndMs = sessionEndMs
+        var newSessionDurationMs = prefs.getLong(KEY_DURATION_MS, 0L)
+        var newLastAccountedMs = lastAccountedMs
+
+        if (sessionStartMs > 0L && sessionEndMs > sessionStartMs) {
+            val effectiveEnd = minOf(nowMs, sessionEndMs)
+            if (effectiveEnd > lastAccountedMs) {
+                val deltaMs = effectiveEnd - lastAccountedMs
+                val dayStart = startOfDayMs(nowMs)
+                val todayDeltaMs = if (lastAccountedMs < dayStart) {
+                    (effectiveEnd - dayStart).coerceAtLeast(0L)
+                } else {
+                    deltaMs
+                }
+                dailyStudyMs += todayDeltaMs
+                totalStudyMs += deltaMs
+                unplantedStudyMs += deltaMs
+
+                while (unplantedStudyMs >= ONE_HOUR_MS) {
+                    unplantedStudyMs -= ONE_HOUR_MS
+                    val plantedAt = effectiveEnd - unplantedStudyMs
+                    val variant = trees.size % 4
+                    trees.add(
+                        PlantedTree(
+                            id = UUID.randomUUID().toString(),
+                            plantedAtMs = plantedAt,
+                            variant = variant
+                        )
+                    )
+                }
+                newLastAccountedMs = effectiveEnd
+            }
+
+            if (nowMs >= sessionEndMs) {
+                newSessionStartMs = 0L
+                newSessionEndMs = 0L
+                newSessionDurationMs = 0L
+                newLastAccountedMs = 0L
+            }
+        }
+
+        val editor = prefs.edit()
+            .putString(KEY_STUDY_DATE, todayKey)
+            .putLong(KEY_DAILY_STUDY_MS, dailyStudyMs)
+            .putLong(KEY_TOTAL_STUDY_MS, totalStudyMs)
+            .putLong(KEY_UNPLANTED_STUDY_MS, unplantedStudyMs)
+            .putString(KEY_TREES_JSON, encodeTrees(trees))
+            .putLong(KEY_SESSION_START_MS, newSessionStartMs)
+            .putLong(KEY_END, newSessionEndMs)
+            .putLong(KEY_DURATION_MS, newSessionDurationMs)
+            .putLong(KEY_LAST_ACCOUNTED_MS, newLastAccountedMs)
+        editor.apply()
+
+        return StudyProgressSnapshot(
+            dailyStudyMs = dailyStudyMs,
+            totalStudyMs = totalStudyMs,
+            unplantedStudyMs = unplantedStudyMs,
+            trees = trees,
+            sessionEndMs = newSessionEndMs,
+            sessionDurationMs = newSessionDurationMs
+        )
+    }
+
+    fun getStudyProgressSnapshot(nowMs: Long = System.currentTimeMillis()): StudyProgressSnapshot {
+        val todayKey = currentDateKey(nowMs)
+        val savedStudyDate = prefs.getString(KEY_STUDY_DATE, "") ?: ""
+        val dailyStudyMs = if (savedStudyDate == todayKey) {
+            prefs.getLong(KEY_DAILY_STUDY_MS, 0L)
+        } else {
+            0L
+        }
+        return StudyProgressSnapshot(
+            dailyStudyMs = dailyStudyMs,
+            totalStudyMs = prefs.getLong(KEY_TOTAL_STUDY_MS, 0L),
+            unplantedStudyMs = prefs.getLong(KEY_UNPLANTED_STUDY_MS, 0L),
+            trees = loadTrees(),
+            sessionEndMs = prefs.getLong(KEY_END, 0L),
+            sessionDurationMs = prefs.getLong(KEY_DURATION_MS, 0L)
+        )
+    }
+
+    fun loadTrees(): List<PlantedTree> {
+        val raw = prefs.getString(KEY_TREES_JSON, null) ?: return emptyList()
+        return runCatching {
+            val array = JSONArray(raw)
+            buildList {
+                for (i in 0 until array.length()) {
+                    val obj = array.optJSONObject(i) ?: continue
+                    val id = obj.optString("id").ifBlank { continue }
+                    val plantedAtMs = obj.optLong("plantedAtMs", 0L)
+                    val variant = obj.optInt("variant", i % 4)
+                    add(PlantedTree(id = id, plantedAtMs = plantedAtMs, variant = variant))
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun encodeTrees(trees: List<PlantedTree>): String {
+        val array = JSONArray()
+        trees.forEach { tree ->
+            array.put(
+                JSONObject()
+                    .put("id", tree.id)
+                    .put("plantedAtMs", tree.plantedAtMs)
+                    .put("variant", tree.variant)
+            )
+        }
+        return array.toString()
+    }
+
+    fun tryConsumeTasksAchievement(
+        allTasksCompleted: Boolean,
+        nowMs: Long = System.currentTimeMillis()
+    ): Boolean {
+        if (!allTasksCompleted) return false
+        val todayKey = currentDateKey(nowMs)
+        val shownDate = prefs.getString(KEY_ACHIEVEMENT_TASKS_DATE, null)
+        if (shownDate == todayKey) return false
+        prefs.edit().putString(KEY_ACHIEVEMENT_TASKS_DATE, todayKey).apply()
+        return true
+    }
+
+    fun tryConsumeHoursAchievement(
+        dailyStudyMs: Long,
+        nowMs: Long = System.currentTimeMillis()
+    ): Boolean {
+        if (dailyStudyMs <= FOUR_HOURS_MS) return false
+        val todayKey = currentDateKey(nowMs)
+        val shownDate = prefs.getString(KEY_ACHIEVEMENT_HOURS_DATE, null)
+        if (shownDate == todayKey) return false
+        prefs.edit().putString(KEY_ACHIEVEMENT_HOURS_DATE, todayKey).apply()
+        return true
     }
 
     fun loadDailyTasks(todayKey: String = currentDateKey()): List<DailyTask> {
@@ -131,36 +362,79 @@ class FocusRepository(private val context: Context) {
             .apply()
     }
 
-    fun getRewardPackage(): String? {
-        return prefs.getString(KEY_REWARD_PACKAGE, null)?.takeIf { it.isNotBlank() }
+    // Audio & Full-Screen Timer Preferences
+    fun loadUploadedTracks(): List<UploadedAudioTrack> {
+        val raw = prefs.getString(KEY_UPLOADED_TRACKS, null) ?: return emptyList()
+        return runCatching {
+            val array = JSONArray(raw)
+            buildList {
+                for (i in 0 until array.length()) {
+                    val obj = array.optJSONObject(i) ?: continue
+                    val id = obj.optString("id").ifBlank { continue }
+                    val uri = obj.optString("uri").ifBlank { continue }
+                    val name = obj.optString("name").ifBlank { continue }
+                    add(UploadedAudioTrack(id = id, uriString = uri, displayName = name))
+                }
+            }
+        }.getOrDefault(emptyList())
     }
 
-    fun setRewardPackage(packageName: String) {
+    fun saveUploadedTracks(tracks: List<UploadedAudioTrack>) {
+        val array = JSONArray()
+        tracks.forEach { track ->
+            array.put(
+                JSONObject()
+                    .put("id", track.id)
+                    .put("uri", track.uriString)
+                    .put("name", track.displayName)
+            )
+        }
+        prefs.edit().putString(KEY_UPLOADED_TRACKS, array.toString()).apply()
+    }
+
+    fun getSelectedBuiltInSoundId(): String {
+        return prefs.getString(KEY_SELECTED_SOUND_ID, BuiltInSound.RAIN.id) ?: BuiltInSound.RAIN.id
+    }
+
+    fun getSelectedUploadedTrackId(): String? {
+        return prefs.getString(KEY_SELECTED_UPLOADED_ID, null)?.takeIf { it.isNotBlank() }
+    }
+
+    fun saveSelectedBuiltInSound(sound: BuiltInSound) {
         prefs.edit()
-            .putString(KEY_REWARD_PACKAGE, packageName)
+            .putString(KEY_SELECTED_SOUND_ID, sound.id)
+            .remove(KEY_SELECTED_UPLOADED_ID)
             .apply()
     }
 
-    fun isRewardClaimedToday(todayKey: String = currentDateKey()): Boolean {
-        return prefs.getString(KEY_REWARD_CLAIMED_DATE, null) == todayKey
-    }
-
-    fun getRewardEndMs(): Long {
-        return prefs.getLong(KEY_REWARD_END, 0L)
-    }
-
-    fun claimDailyHourReward(
-        rewardPackage: String,
-        nowMs: Long = System.currentTimeMillis()
-    ): Long {
-        val todayKey = currentDateKey(nowMs)
-        val endMs = nowMs + ONE_HOUR_MS
+    fun saveSelectedUploadedTrack(trackId: String) {
         prefs.edit()
-            .putString(KEY_REWARD_PACKAGE, rewardPackage)
-            .putLong(KEY_REWARD_END, endMs)
-            .putString(KEY_REWARD_CLAIMED_DATE, todayKey)
+            .putString(KEY_SELECTED_UPLOADED_ID, trackId)
             .apply()
-        return endMs
+    }
+
+    fun getAudioVolume(): Float {
+        return prefs.getFloat(KEY_AUDIO_VOLUME, 0.65f).coerceIn(0f, 1f)
+    }
+
+    fun saveAudioVolume(volume: Float) {
+        prefs.edit().putFloat(KEY_AUDIO_VOLUME, volume.coerceIn(0f, 1f)).apply()
+    }
+
+    fun isAudioLoopEnabled(): Boolean {
+        return prefs.getBoolean(KEY_AUDIO_LOOP, true)
+    }
+
+    fun saveAudioLoopEnabled(loop: Boolean) {
+        prefs.edit().putBoolean(KEY_AUDIO_LOOP, loop).apply()
+    }
+
+    fun isAutoFullscreenTimerEnabled(): Boolean {
+        return prefs.getBoolean(KEY_AUTO_FULLSCREEN_TIMER, false)
+    }
+
+    fun saveAutoFullscreenTimerEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTO_FULLSCREEN_TIMER, enabled).apply()
     }
 
     fun isBlockerServiceEnabled(): Boolean {
@@ -193,9 +467,25 @@ class FocusRepository(private val context: Context) {
         const val KEY_USER_NAME = "user_name"
         const val KEY_DAILY_TASKS = "daily_tasks"
         const val KEY_TASKS_DATE = "tasks_date"
-        const val KEY_REWARD_PACKAGE = "reward_package"
-        const val KEY_REWARD_END = "reward_end"
-        const val KEY_REWARD_CLAIMED_DATE = "reward_claimed_date"
+
+        const val KEY_SESSION_START_MS = "session_start_ms"
+        const val KEY_LAST_ACCOUNTED_MS = "last_accounted_ms"
+        const val KEY_STUDY_DATE = "study_date"
+        const val KEY_DAILY_STUDY_MS = "daily_study_ms"
+        const val KEY_TOTAL_STUDY_MS = "total_study_ms"
+        const val KEY_UNPLANTED_STUDY_MS = "unplanted_study_ms"
+        const val KEY_TREES_JSON = "tree_farm_json"
+        const val KEY_ACHIEVEMENT_TASKS_DATE = "achievement_tasks_date"
+        const val KEY_ACHIEVEMENT_HOURS_DATE = "achievement_hours_date"
+
+        const val KEY_UPLOADED_TRACKS = "uploaded_audio_tracks"
+        const val KEY_SELECTED_SOUND_ID = "selected_sound_id"
+        const val KEY_SELECTED_UPLOADED_ID = "selected_uploaded_id"
+        const val KEY_AUDIO_VOLUME = "audio_volume"
+        const val KEY_AUDIO_LOOP = "audio_loop"
+        const val KEY_AUTO_FULLSCREEN_TIMER = "auto_fullscreen_timer"
+
         const val ONE_HOUR_MS = 60L * 60_000L
+        const val FOUR_HOURS_MS = 4L * ONE_HOUR_MS
     }
 }

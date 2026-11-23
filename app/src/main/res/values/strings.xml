@@ -5,9 +5,13 @@
     <string name="app_subtitle">مساحتك الهادئة للمذاكرة والإنجاز</string>
     <string name="created_by_galileo">created by Galileo</string>
 
-    <string name="tab_focus">التركيز والحظر</string>
-    <string name="tab_tasks_reward">المهام والمكافأة</string>
+    <!-- Navigation Tabs -->
+    <string name="tab_focus">التركيز</string>
+    <string name="tab_audio">الأصوات</string>
+    <string name="tab_tasks">المهام</string>
+    <string name="tab_farm">المزرعة</string>
 
+    <!-- Welcome / Name Screen -->
     <string name="welcome_title">مرحباً بك في رحلة المذاكرة</string>
     <string name="welcome_subtitle">اكتب اسمك لنجهّز لك بيئة تركيز هادئة بعيداً عن المشتتات.</string>
     <string name="welcome_name_label">اكتب اسمك</string>
@@ -20,69 +24,115 @@
     <string name="greeting_user_study">أهلاً يا %1$s — وقت المذاكرة والإنجاز!</string>
     <string name="cd_edit_name">تعديل الاسم</string>
 
+    <!-- Accessibility Service Status -->
     <string name="service_status_active">خدمة الحظر مفعّلة وجاهزة</string>
     <string name="service_status_inactive">خدمة الحظر غير مفعّلة</string>
-    <string name="service_hint_inactive">فعّل خدمة إمكانية الوصول ليتمكن التطبيق من إرجاعك للشاشة الرئيسية عند فتح تطبيق مشتت.</string>
+    <string name="service_hint_inactive">فعّل خدمة إمكانية الوصول ليتمكن التطبيق من حمايتك عند فتح أي تطبيق مشتت.</string>
     <string name="service_hint_active">يمكنك الآن بدء جلسة المذاكرة وسيتم حظر التطبيقات غير المسموحة تلقائياً.</string>
 
-    <string name="btn_enable_service">1) تفعيل خدمة الحظر</string>
+    <!-- Unnumbered Buttons -->
+    <string name="btn_enable_service">تفعيل خدمة الحظر</string>
     <string name="btn_service_settings">إعدادات الخدمة</string>
-    <string name="btn_start_session">2) ابدأ الجلسة</string>
-    <string name="btn_update_session">تحديث الجلسة الجارية</string>
+    <string name="btn_start_session">ابدأ الجلسة</string>
+    <string name="btn_cancel_session">إنهاء الجلسة</string>
+    <string name="cancel_session_dialog_title">إنهاء جلسة المذاكرة؟</string>
+    <string name="cancel_session_dialog_body">سيتم إيقاف الحظر وحفظ وقت المذاكرة الفعلي الذي أنجزته حتى الآن.</string>
+    <string name="cancel_session_confirm">نعم، إنهاء</string>
+    <string name="cancel_session_dismiss">متابعة المذاكرة</string>
 
+    <!-- Duration Hours + Minutes -->
     <string name="section_duration_title">مدة جلسة المذاكرة</string>
-    <string name="hint_duration_minutes">المدة بالدقائق</string>
-    <string name="unit_minutes_short">د</string>
+    <string name="label_hours">الساعات</string>
+    <string name="label_minutes">الدقائق</string>
+    <string name="unit_hours">ساعة</string>
     <string name="unit_minutes">دقيقة</string>
+    <string name="duration_locked_hint">المدة مقفولة أثناء سريان الجلسة الحالية.</string>
 
+    <!-- Allowed Apps -->
     <string name="section_allowed_apps_title">اختر التطبيقات المسموحة:</string>
     <string name="allowed_count_badge">المسموح: %1$d</string>
+    <string name="allowed_apps_locked_hint">قائمة التطبيقات المسموحة مقفولة أثناء الجلسة ولا يمكن تعديلها حتى تنتهي الجلسة أو تُلغى.</string>
     <string name="search_apps_hint">ابحث عن تطبيق…</string>
     <string name="action_select_all">تحديد الكل</string>
     <string name="action_clear_all">إلغاء الكل</string>
     <string name="empty_apps_title">لا توجد تطبيقات مطابقة</string>
     <string name="empty_apps_subtitle">جرّب البحث باسم مختلف أو امسح حقل البحث.</string>
 
+    <!-- Active Session & Hero -->
     <string name="session_active_title">جلسة المذاكرة نشطة الآن</string>
     <string name="session_idle_title">استعد لجلسة مذاكرة عميقة</string>
-    <string name="session_idle_subtitle">حدّد المدة واختر التطبيقات المساعدة للمذاكرة فقط.</string>
-    <string name="session_remaining_label">الوقت المتبقي</string>
+    <string name="session_idle_subtitle">حدّد الساعات والدقائق واختر التطبيقات المساعدة للمذاكرة فقط.</string>
     <string name="session_end_time_label">تنتهي عند %1$s</string>
     <string name="session_allowed_summary">التطبيقات المسموحة: %1$d • تطبيقات النظام الأساسية مسموحة دائماً</string>
+    <string name="today_study_badge">مذاكرة اليوم: %1$s</string>
 
-    <string name="msg_invalid_duration">اكتب مدة صحيحة</string>
+    <!-- Validation & Toasts -->
+    <string name="msg_invalid_duration">اكتب مدة صحيحة (ساعات أو دقائق أكبر من صفر)</string>
     <string name="msg_enable_service_first">فعّل الخدمة أولاً</string>
-    <string name="msg_session_started">بدأت جلسة المذاكرة لمدة %1$d دقيقة</string>
+    <string name="msg_session_started">بدأت جلسة المذاكرة بنجاح</string>
+    <string name="msg_session_cancelled">تم إنهاء الجلسة وحفظ وقت المذاكرة الفعلي</string>
 
-    <!-- Daily Tasks & 1-Hour Reward -->
+    <!-- Blocked Full Screen -->
+    <string name="blocked_screen_message">حلمك يستاهل انك تحارب عشانه ،ارجع ذاكر🩵🩵</string>
+    <string name="blocked_screen_button">الرجوع للمذاكرة</string>
+
+    <!-- Achievement Celebration -->
+    <string name="achievement_title">إنجاز أسطوري!</string>
+    <string name="achievement_message">عاش ياملك يابن الملوك باموووووو🤯🤯🤯</string>
+    <string name="achievement_reason_tasks">أنهيت جميع مهامك اليومية بنجاح!</string>
+    <string name="achievement_reason_hours">تجاوزت ٤ ساعات مذاكرة فعلية اليوم!</string>
+    <string name="achievement_ok_button">أكمل التفوّق</string>
+
+    <!-- Full-Screen Timer -->
+    <string name="fullscreen_timer_open_button">شاشة العدّاد الكاملة</string>
+    <string name="fullscreen_timer_auto_label">فتح شاشة العدّاد الكاملة تلقائياً عند بدء الجلسة</string>
+    <string name="fullscreen_timer_close_button">إغلاق العرض الكامل</string>
+    <string name="fullscreen_timer_subtitle">ركّز في هدفك… الوقت يمر وأنت تصنع مستقبلك</string>
+
+    <!-- Daily Tasks (No Reward) -->
     <string name="daily_tasks_title">متتابع المهام اليومي</string>
     <string name="daily_tasks_progress">%1$d من %2$d مكتملة</string>
     <string name="daily_tasks_input_hint">اكتب مهمة جديدة لليوم…</string>
     <string name="daily_tasks_add_button">إضافة</string>
     <string name="daily_tasks_empty_title">لا توجد مهام ليومك بعد</string>
-    <string name="daily_tasks_empty_subtitle">أضف مهام المذاكرة الخاصة بك بالأعلى، وعند إتمامها جميعاً ستحصل على مكافأة ساعة كاملة لتطبيقك المفضّل!</string>
+    <string name="daily_tasks_empty_subtitle">أضف مهام المذاكرة الخاصة بك بالأعلى وتابع إنجازك لحظة بلحظة.</string>
     <string name="cd_delete_task">حذف المهمة</string>
 
-    <string name="reward_card_title">مكافأة اليوم (ساعة كاملة)</string>
-    <string name="reward_app_not_selected">لم تختر تطبيق المكافأة بعد</string>
-    <string name="reward_selected_app">تطبيق المكافأة: %1$s</string>
-    <string name="reward_choose_app">اختيار التطبيق</string>
-    <string name="reward_change_app">تغيير التطبيق</string>
-    <string name="reward_picker_title">اختر تطبيق المكافأة اليومية</string>
-    <string name="reward_picker_close">إغلاق</string>
+    <!-- Session Audio -->
+    <string name="audio_section_title">أصوات التركيز أثناء الجلسة</string>
+    <string name="audio_section_subtitle">يعمل الصوت في الخلفية حتى مع قفل الشاشة، ويتوقف تلقائياً عند انتهاء الجلسة.</string>
+    <string name="audio_builtin_title">الأصوات الجاهزة</string>
+    <string name="audio_rain">صوت المطر</string>
+    <string name="audio_white_noise">ضوضاء بيضاء (White Noise)</string>
+    <string name="audio_alpha">ترددات ألفا (Alpha) للتركيز الهادئ</string>
+    <string name="audio_beta">ترددات بيتا (Beta) للنشاط الذهني</string>
+    <string name="audio_gamma">ترددات جاما (Gamma) للاستيعاب العميق</string>
+    <string name="audio_headphones_notice">يفضل استخدام سماعات للاستفادة من ترددات الـ Binaural Beats</string>
+    <string name="audio_uploaded_title">ملفاتك الصوتية (قرآن / تركيز)</string>
+    <string name="audio_upload_button">إضافة ملف صوتي من الجهاز</string>
+    <string name="audio_uploaded_empty">لم تقم بإضافة أي ملفات صوتية بعد.</string>
+    <string name="audio_play">تشغيل</string>
+    <string name="audio_pause">إيقاف مؤقت</string>
+    <string name="audio_volume_label">مستوى الصوت</string>
+    <string name="audio_loop_label">تكرار مستمر (Loop)</string>
+    <string name="audio_notification_channel_name">صوت جلسة التركيز</string>
+    <string name="audio_notification_title">Focus Lock — صوت التركيز يعمل</string>
+    <string name="audio_notification_body">جاري تشغيل: %1$s</string>
+    <string name="audio_notification_stop">إيقاف</string>
+    <string name="audio_permission_rationale">لتشغيل الصوت في الخلفية وظهور التحكم في الإشعارات، اسمح بإذن الإشعارات.</string>
+    <string name="audio_permission_grant">سماح بالإشعارات</string>
+    <string name="cd_delete_audio">حذف الملف الصوتي</string>
 
-    <string name="reward_status_locked_no_tasks">أضف مهام اليوم وأكملها جميعاً لفتح ساعة المكافأة.</string>
-    <string name="reward_status_locked_incomplete">تبقّى %1$d مهمة لإتمام جميع مهام اليوم وفتح المكافأة.</string>
-    <string name="reward_status_locked_pick_app">أكملت كل المهام! اختر تطبيق المكافأة لتستمتع بساعتك اليومية.</string>
-    <string name="reward_status_ready">أحسنت! أكملت جميع مهام اليوم — يمكنك الآن استلام ساعة كاملة.</string>
-    <string name="reward_status_active">المكافأة نشطة! هذا التطبيق مسموح به حتى انتهاء الساعة.</string>
-    <string name="reward_status_claimed_today">استمتعت بساعة مكافأة اليوم — تتجدد المكافأة غداً!</string>
-    <string name="reward_remaining_time">الوقت المتبقي للمكافأة: %1$s</string>
-    <string name="reward_claim_button">استلام مكافأة الساعة (60 دقيقة)</string>
-    <string name="reward_open_app_button">فتح تطبيق المكافأة</string>
-    <string name="msg_reward_claimed">تم تفعيل مكافأة ساعة كاملة لتطبيق %1$s!</string>
-    <string name="msg_reward_pick_app_first">اختر تطبيق المكافأة أولاً</string>
-    <string name="msg_reward_app_launch_error">تعذّر فتح التطبيق المحدد</string>
+    <!-- Tree Farm -->
+    <string name="farm_title">مزرعة الأشجار</string>
+    <string name="farm_subtitle">كل ساعة مذاكرة فعلية كاملة تزرع شجرة جديدة في مزرعتك.</string>
+    <string name="farm_total_trees">إجمالي الأشجار: %1$d</string>
+    <string name="farm_next_tree_progress">التقدم نحو الشجرة القادمة: %1$d / 60 دقيقة</string>
+    <string name="farm_total_study_time">إجمالي المذاكرة المحفوظ: %1$s</string>
+    <string name="farm_today_study_time">مذاكرة اليوم: %1$s</string>
+    <string name="farm_empty_title">مزرعتك بانتظار أول شجرة!</string>
+    <string name="farm_empty_subtitle">أكمل ساعة مذاكرة فعلية كاملة (60 دقيقة) لتنمو أول شجرة في مزرعتك.</string>
+    <string name="farm_tree_label">شجرة #%1$d</string>
 
     <string name="cd_hero_banner">خلفية جلسة المذاكرة</string>
     <string name="cd_app_icon">أيقونة %1$s</string>

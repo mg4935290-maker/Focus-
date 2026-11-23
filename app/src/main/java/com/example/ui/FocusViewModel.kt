@@ -4,9 +4,14 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.R
+import com.example.audio.FocusAudioService
+import com.example.data.BuiltInSound
 import com.example.data.DailyTask
 import com.example.data.FocusRepository
 import com.example.data.InstalledApp
+import com.example.data.PlantedTree
+import com.example.data.SelectedAudioSource
+import com.example.data.UploadedAudioTrack
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -22,7 +27,9 @@ import java.util.UUID
 
 enum class MainTab {
     FOCUS,
-    TASKS_REWARD
+    AUDIO,
+    TASKS,
+    FARM
 }
 
 data class FocusUiState(
@@ -36,19 +43,29 @@ data class FocusUiState(
     val installedApps: List<InstalledApp> = emptyList(),
     val allowedPackages: Set<String> = emptySet(),
     val searchQuery: String = "",
-    val durationInput: String = "25",
+    val hoursInput: String = "1",
+    val minutesInput: String = "0",
     val isServiceEnabled: Boolean = false,
     val sessionEndMs: Long = 0L,
     val sessionDurationMs: Long = 0L,
     val remainingMs: Long = 0L,
+    val showCancelSessionDialog: Boolean = false,
+    val isFullScreenTimerVisible: Boolean = false,
+    val autoOpenFullscreenTimer: Boolean = false,
+    val dailyStudyMs: Long = 0L,
+    val totalStudyMs: Long = 0L,
+    val unplantedStudyMs: Long = 0L,
+    val plantedTrees: List<PlantedTree> = emptyList(),
     val dailyTasks: List<DailyTask> = emptyList(),
     val newTaskInput: String = "",
-    val rewardPackageName: String? = null,
-    val isRewardClaimedToday: Boolean = false,
-    val rewardEndMs: Long = 0L,
-    val rewardRemainingMs: Long = 0L,
-    val isRewardAppPickerOpen: Boolean = false,
-    val rewardAppSearchQuery: String = ""
+    val achievementReasonResId: Int? = null,
+    val uploadedTracks: List<UploadedAudioTrack> = emptyList(),
+    val selectedBuiltInSound: BuiltInSound = BuiltInSound.RAIN,
+    val selectedUploadedTrackId: String? = null,
+    val audioVolume: Float = 0.65f,
+    val audioLoopEnabled: Boolean = true,
+    val isAudioPlaying: Boolean = false,
+    val playingAudioTitle: String = ""
 ) {
     val isSessionActive: Boolean
         get() = remainingMs > 0L
@@ -59,14 +76,15 @@ data class FocusUiState(
     val allTasksCompleted: Boolean
         get() = dailyTasks.isNotEmpty() && dailyTasks.all { it.isCompleted }
 
-    val isRewardActive: Boolean
-        get() = rewardRemainingMs > 0L
-
-    val canClaimReward: Boolean
-        get() = allTasksCompleted && !isRewardClaimedToday && !rewardPackageName.isNullOrBlank()
-
-    val selectedRewardApp: InstalledApp?
-        get() = installedApps.firstOrNull { it.packageName == rewardPackageName }
+    val selectedAudioSource: SelectedAudioSource
+        get() {
+            val uploaded = uploadedTracks.firstOrNull { it.id == selectedUploadedTrackId }
+            return if (uploaded != null) {
+                SelectedAudioSource.Uploaded(uploaded)
+            } else {
+                SelectedAudioSource.BuiltIn(selectedBuiltInSound)
+            }
+        }
 
     val filteredApps: List<InstalledApp>
         get() {
@@ -77,24 +95,14 @@ data class FocusUiState(
                     it.packageName.contains(q, ignoreCase = true)
             }
         }
-
-    val filteredRewardPickerApps: List<InstalledApp>
-        get() {
-            val q = rewardAppSearchQuery.trim()
-            if (q.isEmpty()) return installedApps
-            return installedApps.filter {
-                it.label.contains(q, ignoreCase = true) ||
-                    it.packageName.contains(q, ignoreCase = true)
-            }
-        }
 }
 
 sealed interface FocusUiEvent {
-    data class ShowMessage(val messageResId: Int, val arg: Long? = null) : FocusUiEvent
-    data class ShowStringMessage(val messageResId: Int, val textArg: String) : FocusUiEvent
+    data class ShowMessage(val messageResId: Int) : FocusUiEvent
     data object OpenAccessibilitySettings : FocusUiEvent
     data object NavigateHome : FocusUiEvent
-    data class LaunchApp(val packageName: String) : FocusUiEvent
+    data object LaunchAudioFilePicker : FocusUiEvent
+    data object RequestNotificationPermission : FocusUiEvent
 }
 
 class FocusViewModel @JvmOverloads constructor(
@@ -111,22 +119,37 @@ class FocusViewModel @JvmOverloads constructor(
     private var tickerJob: Job? = null
 
     init {
+        observeAudioPlayback()
         refreshAll()
     }
 
+    private fun observeAudioPlayback() {
+        viewModelScope.launch {
+            FocusAudioService.playbackState.collect { audio ->
+                _uiState.update {
+                    it.copy(
+                        isAudioPlaying = audio.isPlaying,
+                        playingAudioTitle = audio.activeTitle
+                    )
+                }
+            }
+        }
+    }
+
     fun refreshAll() {
+        val now = System.currentTimeMillis()
+        val snapshot = repository.syncStudyProgress(now)
         val savedName = repository.getUserName()
         val savedAllowed = repository.getAllowedPackages()
-        val endMs = repository.getSessionEndMs()
-        val durationMs = repository.getSessionDurationMs()
         val serviceEnabled = repository.isBlockerServiceEnabled()
         val tasks = repository.loadDailyTasks()
-        val rewardPkg = repository.getRewardPackage()
-        val rewardClaimedToday = repository.isRewardClaimedToday()
-        val rewardEndMs = repository.getRewardEndMs()
-        val now = System.currentTimeMillis()
-        val remaining = (endMs - now).coerceAtLeast(0L)
-        val rewardRemaining = (rewardEndMs - now).coerceAtLeast(0L)
+        val uploadedTracks = repository.loadUploadedTracks()
+        val builtInSound = BuiltInSound.fromId(repository.getSelectedBuiltInSoundId()) ?: BuiltInSound.RAIN
+        val uploadedId = repository.getSelectedUploadedTrackId()
+        val volume = repository.getAudioVolume()
+        val loop = repository.isAudioLoopEnabled()
+        val autoFullscreen = repository.isAutoFullscreenTimerEnabled()
+        val remaining = (snapshot.sessionEndMs - now).coerceAtLeast(0L)
 
         _uiState.update { state ->
             state.copy(
@@ -136,18 +159,30 @@ class FocusViewModel @JvmOverloads constructor(
                 canNavigateBackFromWelcome = false,
                 allowedPackages = savedAllowed,
                 isServiceEnabled = serviceEnabled,
-                sessionEndMs = endMs,
-                sessionDurationMs = durationMs,
+                sessionEndMs = snapshot.sessionEndMs,
+                sessionDurationMs = snapshot.sessionDurationMs,
                 remainingMs = remaining,
+                dailyStudyMs = snapshot.dailyStudyMs,
+                totalStudyMs = snapshot.totalStudyMs,
+                unplantedStudyMs = snapshot.unplantedStudyMs,
+                plantedTrees = snapshot.trees,
                 dailyTasks = tasks,
-                rewardPackageName = rewardPkg,
-                isRewardClaimedToday = rewardClaimedToday,
-                rewardEndMs = rewardEndMs,
-                rewardRemainingMs = rewardRemaining
+                uploadedTracks = uploadedTracks,
+                selectedBuiltInSound = builtInSound,
+                selectedUploadedTrackId = uploadedId,
+                audioVolume = volume,
+                audioLoopEnabled = loop,
+                autoOpenFullscreenTimer = autoFullscreen
             )
         }
 
-        ensureTickerState(endMs, rewardEndMs)
+        checkHoursAchievement(snapshot.dailyStudyMs, now)
+
+        if (remaining > 0L) {
+            startTicker(snapshot.sessionEndMs)
+        } else {
+            tickerJob?.cancel()
+        }
 
         viewModelScope.launch {
             val apps = repository.loadInstalledApps()
@@ -161,29 +196,35 @@ class FocusViewModel @JvmOverloads constructor(
     }
 
     fun refreshServiceAndTimer() {
-        val endMs = repository.getSessionEndMs()
-        val durationMs = repository.getSessionDurationMs()
+        val now = System.currentTimeMillis()
+        val snapshot = repository.syncStudyProgress(now)
         val serviceEnabled = repository.isBlockerServiceEnabled()
         val tasks = repository.loadDailyTasks()
-        val rewardClaimedToday = repository.isRewardClaimedToday()
-        val rewardEndMs = repository.getRewardEndMs()
-        val now = System.currentTimeMillis()
-        val remaining = (endMs - now).coerceAtLeast(0L)
-        val rewardRemaining = (rewardEndMs - now).coerceAtLeast(0L)
+        val remaining = (snapshot.sessionEndMs - now).coerceAtLeast(0L)
 
         _uiState.update { state ->
             state.copy(
                 isServiceEnabled = serviceEnabled,
-                sessionEndMs = endMs,
-                sessionDurationMs = durationMs,
+                sessionEndMs = snapshot.sessionEndMs,
+                sessionDurationMs = snapshot.sessionDurationMs,
                 remainingMs = remaining,
+                dailyStudyMs = snapshot.dailyStudyMs,
+                totalStudyMs = snapshot.totalStudyMs,
+                unplantedStudyMs = snapshot.unplantedStudyMs,
+                plantedTrees = snapshot.trees,
                 dailyTasks = tasks,
-                isRewardClaimedToday = rewardClaimedToday,
-                rewardEndMs = rewardEndMs,
-                rewardRemainingMs = rewardRemaining
+                isFullScreenTimerVisible = if (remaining <= 0L) false else state.isFullScreenTimerVisible
             )
         }
-        ensureTickerState(endMs, rewardEndMs)
+
+        checkHoursAchievement(snapshot.dailyStudyMs, now)
+
+        if (remaining > 0L) {
+            startTicker(snapshot.sessionEndMs)
+        } else {
+            tickerJob?.cancel()
+            FocusAudioService.stop(getApplication())
+        }
     }
 
     fun selectTab(tab: MainTab) {
@@ -236,6 +277,7 @@ class FocusViewModel @JvmOverloads constructor(
     }
 
     fun toggleApp(packageName: String) {
+        if (_uiState.value.isSessionActive) return
         _uiState.update { state ->
             val updated = state.allowedPackages.toMutableSet()
             if (packageName in updated) updated.remove(packageName) else updated.add(packageName)
@@ -244,6 +286,7 @@ class FocusViewModel @JvmOverloads constructor(
     }
 
     fun selectAllFiltered() {
+        if (_uiState.value.isSessionActive) return
         _uiState.update { state ->
             val updated = state.allowedPackages.toMutableSet()
             state.filteredApps.forEach { updated.add(it.packageName) }
@@ -252,6 +295,7 @@ class FocusViewModel @JvmOverloads constructor(
     }
 
     fun clearAllFiltered() {
+        if (_uiState.value.isSessionActive) return
         _uiState.update { state ->
             val updated = state.allowedPackages.toMutableSet()
             state.filteredApps.forEach { updated.remove(it.packageName) }
@@ -263,13 +307,31 @@ class FocusViewModel @JvmOverloads constructor(
         _uiState.update { it.copy(searchQuery = query) }
     }
 
-    fun onDurationInputChange(input: String) {
-        val digitsOnly = input.filter { it.isDigit() }.take(4)
-        _uiState.update { it.copy(durationInput = digitsOnly) }
+    fun onHoursInputChange(input: String) {
+        if (_uiState.value.isSessionActive) return
+        val digitsOnly = input.filter { it.isDigit() }.take(2)
+        _uiState.update { it.copy(hoursInput = digitsOnly) }
     }
 
-    fun selectPresetMinutes(minutes: Int) {
-        _uiState.update { it.copy(durationInput = minutes.toString()) }
+    fun onMinutesInputChange(input: String) {
+        if (_uiState.value.isSessionActive) return
+        val digitsOnly = input.filter { it.isDigit() }.take(3)
+        _uiState.update { it.copy(minutesInput = digitsOnly) }
+    }
+
+    fun onAutoFullscreenTimerChange(enabled: Boolean) {
+        repository.saveAutoFullscreenTimerEnabled(enabled)
+        _uiState.update { it.copy(autoOpenFullscreenTimer = enabled) }
+    }
+
+    fun openFullScreenTimer() {
+        if (_uiState.value.isSessionActive) {
+            _uiState.update { it.copy(isFullScreenTimerVisible = true) }
+        }
+    }
+
+    fun closeFullScreenTimer() {
+        _uiState.update { it.copy(isFullScreenTimerVisible = false) }
     }
 
     fun onEnableServiceClick() {
@@ -277,12 +339,16 @@ class FocusViewModel @JvmOverloads constructor(
     }
 
     fun onStartSessionClick() {
-        val minutes = _uiState.value.durationInput.toLongOrNull() ?: 0L
+        if (_uiState.value.isSessionActive) return
+        val hours = _uiState.value.hoursInput.toLongOrNull() ?: 0L
+        val minutes = _uiState.value.minutesInput.toLongOrNull() ?: 0L
+        val totalMinutes = hours * 60L + minutes
+
         val serviceEnabled = repository.isBlockerServiceEnabled()
         _uiState.update { it.copy(isServiceEnabled = serviceEnabled) }
 
         when {
-            minutes <= 0L -> {
+            totalMinutes <= 0L -> {
                 _events.tryEmit(FocusUiEvent.ShowMessage(R.string.msg_invalid_duration))
             }
             !serviceEnabled -> {
@@ -290,25 +356,64 @@ class FocusViewModel @JvmOverloads constructor(
                 _events.tryEmit(FocusUiEvent.OpenAccessibilitySettings)
             }
             else -> {
+                val now = System.currentTimeMillis()
                 val (endMs, durationMs) = repository.startSession(
                     allowedPackages = _uiState.value.allowedPackages,
-                    durationMinutes = minutes
+                    durationMinutes = totalMinutes,
+                    nowMs = now
                 )
+                val openFullScreen = _uiState.value.autoOpenFullscreenTimer
                 _uiState.update { state ->
                     state.copy(
                         sessionEndMs = endMs,
                         sessionDurationMs = durationMs,
-                        remainingMs = (endMs - System.currentTimeMillis()).coerceAtLeast(0L)
+                        remainingMs = (endMs - now).coerceAtLeast(0L),
+                        isFullScreenTimerVisible = openFullScreen
                     )
                 }
-                ensureTickerState(endMs, _uiState.value.rewardEndMs)
-                _events.tryEmit(FocusUiEvent.ShowMessage(R.string.msg_session_started, minutes))
-                _events.tryEmit(FocusUiEvent.NavigateHome)
+                startTicker(endMs)
+                _events.tryEmit(FocusUiEvent.ShowMessage(R.string.msg_session_started))
+                if (!openFullScreen) {
+                    _events.tryEmit(FocusUiEvent.NavigateHome)
+                }
             }
         }
     }
 
-    // Daily Task Tracker & 1-Hour Reward
+    fun requestCancelSession() {
+        if (_uiState.value.isSessionActive) {
+            _uiState.update { it.copy(showCancelSessionDialog = true) }
+        }
+    }
+
+    fun dismissCancelSession() {
+        _uiState.update { it.copy(showCancelSessionDialog = false) }
+    }
+
+    fun confirmCancelSession() {
+        val now = System.currentTimeMillis()
+        val snapshot = repository.cancelSession(now)
+        tickerJob?.cancel()
+        FocusAudioService.stop(getApplication())
+
+        _uiState.update {
+            it.copy(
+                showCancelSessionDialog = false,
+                isFullScreenTimerVisible = false,
+                sessionEndMs = 0L,
+                sessionDurationMs = 0L,
+                remainingMs = 0L,
+                dailyStudyMs = snapshot.dailyStudyMs,
+                totalStudyMs = snapshot.totalStudyMs,
+                unplantedStudyMs = snapshot.unplantedStudyMs,
+                plantedTrees = snapshot.trees
+            )
+        }
+        checkHoursAchievement(snapshot.dailyStudyMs, now)
+        _events.tryEmit(FocusUiEvent.ShowMessage(R.string.msg_session_cancelled))
+    }
+
+    // Daily Task Tracker
     fun onNewTaskInputChange(input: String) {
         _uiState.update { it.copy(newTaskInput = input) }
     }
@@ -337,6 +442,11 @@ class FocusViewModel @JvmOverloads constructor(
         }
         repository.saveDailyTasks(updated)
         _uiState.update { it.copy(dailyTasks = updated) }
+
+        val allDone = updated.isNotEmpty() && updated.all { it.isCompleted }
+        if (repository.tryConsumeTasksAchievement(allDone)) {
+            _uiState.update { it.copy(achievementReasonResId = R.string.achievement_reason_tasks) }
+        }
     }
 
     fun onDeleteTask(taskId: String) {
@@ -345,75 +455,161 @@ class FocusViewModel @JvmOverloads constructor(
         _uiState.update { it.copy(dailyTasks = updated) }
     }
 
-    fun openRewardAppPicker() {
-        _uiState.update { it.copy(isRewardAppPickerOpen = true, rewardAppSearchQuery = "") }
+    fun dismissAchievementDialog() {
+        _uiState.update { it.copy(achievementReasonResId = null) }
     }
 
-    fun dismissRewardAppPicker() {
-        _uiState.update { it.copy(isRewardAppPickerOpen = false, rewardAppSearchQuery = "") }
-    }
-
-    fun onRewardAppSearchChange(query: String) {
-        _uiState.update { it.copy(rewardAppSearchQuery = query) }
-    }
-
-    fun selectRewardApp(packageName: String) {
-        repository.setRewardPackage(packageName)
+    // Audio Controls
+    fun selectBuiltInSound(sound: BuiltInSound) {
+        repository.saveSelectedBuiltInSound(sound)
+        val wasPlaying = _uiState.value.isAudioPlaying
         _uiState.update {
             it.copy(
-                rewardPackageName = packageName,
-                isRewardAppPickerOpen = false,
-                rewardAppSearchQuery = ""
+                selectedBuiltInSound = sound,
+                selectedUploadedTrackId = null
+            )
+        }
+        if (wasPlaying) {
+            startSelectedAudio()
+        }
+    }
+
+    fun selectUploadedTrack(trackId: String) {
+        repository.saveSelectedUploadedTrack(trackId)
+        val wasPlaying = _uiState.value.isAudioPlaying
+        _uiState.update { it.copy(selectedUploadedTrackId = trackId) }
+        if (wasPlaying) {
+            startSelectedAudio()
+        }
+    }
+
+    fun onRequestUploadAudio() {
+        _events.tryEmit(FocusUiEvent.LaunchAudioFilePicker)
+    }
+
+    fun onAudioFilePicked(uriString: String, displayName: String) {
+        val track = UploadedAudioTrack(
+            id = UUID.randomUUID().toString(),
+            uriString = uriString,
+            displayName = displayName
+        )
+        val updated = _uiState.value.uploadedTracks + track
+        repository.saveUploadedTracks(updated)
+        repository.saveSelectedUploadedTrack(track.id)
+        _uiState.update {
+            it.copy(
+                uploadedTracks = updated,
+                selectedUploadedTrackId = track.id
             )
         }
     }
 
-    fun onClaimRewardClick() {
+    fun deleteUploadedTrack(trackId: String) {
+        val wasSelectedAndPlaying =
+            _uiState.value.selectedUploadedTrackId == trackId && _uiState.value.isAudioPlaying
+        val updated = _uiState.value.uploadedTracks.filterNot { it.id == trackId }
+        repository.saveUploadedTracks(updated)
+        val newSelectedId = if (_uiState.value.selectedUploadedTrackId == trackId) {
+            null
+        } else {
+            _uiState.value.selectedUploadedTrackId
+        }
+        if (newSelectedId == null) {
+            repository.saveSelectedBuiltInSound(_uiState.value.selectedBuiltInSound)
+        }
+        _uiState.update {
+            it.copy(
+                uploadedTracks = updated,
+                selectedUploadedTrackId = newSelectedId
+            )
+        }
+        if (wasSelectedAndPlaying) {
+            FocusAudioService.stop(getApplication())
+        }
+    }
+
+    fun onAudioVolumeChange(volume: Float) {
+        val clamped = volume.coerceIn(0f, 1f)
+        repository.saveAudioVolume(clamped)
+        _uiState.update { it.copy(audioVolume = clamped) }
+        FocusAudioService.updateControls(getApplication(), clamped, _uiState.value.audioLoopEnabled)
+    }
+
+    fun onAudioLoopToggle(loop: Boolean) {
+        repository.saveAudioLoopEnabled(loop)
+        _uiState.update { it.copy(audioLoopEnabled = loop) }
+        FocusAudioService.updateControls(getApplication(), _uiState.value.audioVolume, loop)
+    }
+
+    fun onToggleAudioPlayback() {
+        if (_uiState.value.isAudioPlaying) {
+            FocusAudioService.stop(getApplication())
+        } else {
+            startSelectedAudio()
+        }
+    }
+
+    fun requestNotificationPermission() {
+        _events.tryEmit(FocusUiEvent.RequestNotificationPermission)
+    }
+
+    private fun startSelectedAudio() {
         val state = _uiState.value
-        val rewardPkg = state.rewardPackageName
-        if (rewardPkg.isNullOrBlank()) {
-            _events.tryEmit(FocusUiEvent.ShowMessage(R.string.msg_reward_pick_app_first))
-            return
+        val app = getApplication<Application>()
+        when (val source = state.selectedAudioSource) {
+            is SelectedAudioSource.BuiltIn -> {
+                FocusAudioService.startBuiltIn(
+                    context = app,
+                    sound = source.sound,
+                    volume = state.audioVolume,
+                    loop = state.audioLoopEnabled
+                )
+            }
+            is SelectedAudioSource.Uploaded -> {
+                FocusAudioService.startUploadedUri(
+                    context = app,
+                    uriString = source.track.uriString,
+                    title = source.track.displayName,
+                    volume = state.audioVolume,
+                    loop = state.audioLoopEnabled
+                )
+            }
         }
-        if (!state.allTasksCompleted || state.isRewardClaimedToday) return
-
-        val rewardEndMs = repository.claimDailyHourReward(rewardPkg)
-        val now = System.currentTimeMillis()
-        _uiState.update {
-            it.copy(
-                isRewardClaimedToday = true,
-                rewardEndMs = rewardEndMs,
-                rewardRemainingMs = (rewardEndMs - now).coerceAtLeast(0L)
-            )
-        }
-        ensureTickerState(_uiState.value.sessionEndMs, rewardEndMs)
-
-        val appLabel = state.selectedRewardApp?.label ?: rewardPkg
-        _events.tryEmit(FocusUiEvent.ShowStringMessage(R.string.msg_reward_claimed, appLabel))
     }
 
-    fun onOpenRewardAppClick() {
-        val pkg = _uiState.value.rewardPackageName ?: return
-        _events.tryEmit(FocusUiEvent.LaunchApp(pkg))
+    private fun checkHoursAchievement(dailyStudyMs: Long, nowMs: Long) {
+        if (repository.tryConsumeHoursAchievement(dailyStudyMs, nowMs)) {
+            _uiState.update { it.copy(achievementReasonResId = R.string.achievement_reason_hours) }
+        }
     }
 
-    private fun ensureTickerState(sessionEndMs: Long, rewardEndMs: Long) {
+    private fun startTicker(endMs: Long) {
         tickerJob?.cancel()
-        val now = System.currentTimeMillis()
-        if (sessionEndMs <= now && rewardEndMs <= now) return
-
         tickerJob = viewModelScope.launch {
             while (isActive) {
-                val currentNow = System.currentTimeMillis()
-                val sessionRem = (sessionEndMs - currentNow).coerceAtLeast(0L)
-                val rewardRem = (rewardEndMs - currentNow).coerceAtLeast(0L)
-                _uiState.update {
-                    it.copy(
-                        remainingMs = sessionRem,
-                        rewardRemainingMs = rewardRem
+                val now = System.currentTimeMillis()
+                val snapshot = repository.syncStudyProgress(now)
+                val remaining = (endMs - now).coerceAtLeast(0L)
+
+                _uiState.update { state ->
+                    state.copy(
+                        remainingMs = remaining,
+                        dailyStudyMs = snapshot.dailyStudyMs,
+                        totalStudyMs = snapshot.totalStudyMs,
+                        unplantedStudyMs = snapshot.unplantedStudyMs,
+                        plantedTrees = snapshot.trees,
+                        sessionEndMs = snapshot.sessionEndMs,
+                        sessionDurationMs = snapshot.sessionDurationMs,
+                        isFullScreenTimerVisible = if (remaining <= 0L) false else state.isFullScreenTimerVisible
                     )
                 }
-                if (sessionRem <= 0L && rewardRem <= 0L) break
+
+                checkHoursAchievement(snapshot.dailyStudyMs, now)
+
+                if (remaining <= 0L) {
+                    FocusAudioService.stop(getApplication())
+                    break
+                }
                 delay(1000L)
             }
         }

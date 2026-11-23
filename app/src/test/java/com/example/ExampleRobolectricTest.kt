@@ -3,8 +3,10 @@ package com.example
 import android.content.Context
 import android.provider.Settings
 import androidx.test.core.app.ApplicationProvider
+import com.example.data.BuiltInSound
 import com.example.data.DailyTask
 import com.example.data.FocusRepository
+import com.example.data.UploadedAudioTrack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -18,11 +20,20 @@ import org.robolectric.annotation.Config
 class ExampleRobolectricTest {
 
     @Test
-    fun `read string from context`() {
+    fun `required exact strings match specification`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val appName = context.getString(R.string.app_name)
-        assertEquals("Focus Lock", appName)
+        assertEquals("Focus Lock", context.getString(R.string.app_name))
         assertEquals("created by Galileo", context.getString(R.string.created_by_galileo))
+        assertEquals(
+            "حلمك يستاهل انك تحارب عشانه ،ارجع ذاكر🩵🩵",
+            context.getString(R.string.blocked_screen_message)
+        )
+        assertEquals(
+            "عاش ياملك يابن الملوك باموووووو🤯🤯🤯",
+            context.getString(R.string.achievement_message)
+        )
+        assertEquals("تفعيل خدمة الحظر", context.getString(R.string.btn_enable_service))
+        assertEquals("ابدأ الجلسة", context.getString(R.string.btn_start_session))
     }
 
     @Test
@@ -56,33 +67,59 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `claimDailyHourReward sets one hour unlock and marks today claimed`() {
+    fun `tree farm plants one tree only per full completed hour`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val repo = FocusRepository(context)
-        val now = 1_700_000_000_000L
-        val todayKey = repo.currentDateKey(now)
+        val t0 = 1_700_000_000_000L
 
-        assertFalse(repo.isRewardClaimedToday(todayKey))
-        val endMs = repo.claimDailyHourReward("com.google.android.youtube", nowMs = now)
+        // 40-minute session -> 0 trees planted, 40m carried
+        repo.startSession(emptySet(), durationMinutes = 40L, nowMs = t0)
+        val after40m = repo.syncStudyProgress(t0 + 40L * 60_000L)
+        assertEquals(0, after40m.trees.size)
+        assertEquals(40L * 60_000L, after40m.unplantedStudyMs)
 
-        assertEquals(now + FocusRepository.ONE_HOUR_MS, endMs)
-        assertEquals("com.google.android.youtube", repo.getRewardPackage())
-        assertTrue(repo.isRewardClaimedToday(todayKey))
-        assertFalse(repo.isRewardClaimedToday("2099-01-01"))
+        // Next 2h 30m session (total 3h 10m) -> 3 trees planted, 10m carried
+        val t1 = t0 + 50L * 60_000L
+        repo.startSession(emptySet(), durationMinutes = 150L, nowMs = t1)
+        val afterLongSession = repo.syncStudyProgress(t1 + 150L * 60_000L)
+        assertEquals(3, afterLongSession.trees.size)
+        assertEquals(10L * 60_000L, afterLongSession.unplantedStudyMs)
+        assertEquals(190L * 60_000L, afterLongSession.totalStudyMs)
     }
 
     @Test
-    fun `startSession persists allowed packages and future end time`() {
+    fun `achievements trigger once per day per condition`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val repo = FocusRepository(context)
-        val allowed = setOf("com.android.calculator2", "com.whatsapp")
+        val day1 = 1_700_000_000_000L
+        val day2 = day1 + 24L * 3_600_000L
 
-        val (endMs, durationMs) = repo.startSession(allowed, 15L)
+        assertFalse(repo.tryConsumeTasksAchievement(allTasksCompleted = false, nowMs = day1))
+        assertTrue(repo.tryConsumeTasksAchievement(allTasksCompleted = true, nowMs = day1))
+        assertFalse(repo.tryConsumeTasksAchievement(allTasksCompleted = true, nowMs = day1))
+        assertTrue(repo.tryConsumeTasksAchievement(allTasksCompleted = true, nowMs = day2))
 
-        assertEquals(allowed, repo.getAllowedPackages())
-        assertEquals(15L * 60_000L, durationMs)
-        assertEquals(endMs, repo.getSessionEndMs())
-        assertTrue(endMs > System.currentTimeMillis())
+        assertFalse(repo.tryConsumeHoursAchievement(dailyStudyMs = FocusRepository.FOUR_HOURS_MS, nowMs = day1))
+        assertTrue(repo.tryConsumeHoursAchievement(dailyStudyMs = FocusRepository.FOUR_HOURS_MS + 1000L, nowMs = day1))
+        assertFalse(repo.tryConsumeHoursAchievement(dailyStudyMs = FocusRepository.FOUR_HOURS_MS + 60_000L, nowMs = day1))
+        assertTrue(repo.tryConsumeHoursAchievement(dailyStudyMs = FocusRepository.FOUR_HOURS_MS + 1000L, nowMs = day2))
+    }
+
+    @Test
+    fun `uploaded audio tracks and built-in selection persist`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val repo = FocusRepository(context)
+        val tracks = listOf(
+            UploadedAudioTrack(id = "t1", uriString = "content://audio/1", displayName = "سورة الكهف.mp3")
+        )
+        repo.saveUploadedTracks(tracks)
+        repo.saveSelectedUploadedTrack("t1")
+        assertEquals(tracks, repo.loadUploadedTracks())
+        assertEquals("t1", repo.getSelectedUploadedTrackId())
+
+        repo.saveSelectedBuiltInSound(BuiltInSound.GAMMA)
+        assertEquals(BuiltInSound.GAMMA.id, repo.getSelectedBuiltInSoundId())
+        assertEquals(null, repo.getSelectedUploadedTrackId())
     }
 
     @Test
