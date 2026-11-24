@@ -94,8 +94,11 @@ fun FullScreenTimerScreen(
         label = "bottom_color"
     )
 
-    val progress = remember(uiState.remainingMs, uiState.sessionDurationMs) {
-        if (uiState.sessionDurationMs > 0L && uiState.remainingMs > 0L) {
+    val displayMs = if (uiState.isStopwatchActive) uiState.stopwatchElapsedMs else uiState.remainingMs
+    val progress = remember(displayMs, uiState.sessionDurationMs, uiState.isStopwatchActive) {
+        if (uiState.isStopwatchActive) {
+            ((displayMs % 3_600_000L).toFloat() / 3_600_000f).coerceIn(0.05f, 1f)
+        } else if (uiState.sessionDurationMs > 0L && uiState.remainingMs > 0L) {
             (uiState.remainingMs.toFloat() / uiState.sessionDurationMs.toFloat()).coerceIn(0f, 1f)
         } else {
             0f
@@ -206,7 +209,7 @@ fun FullScreenTimerScreen(
                 }
 
                 Text(
-                    text = formatTimerDisplay(uiState.remainingMs),
+                    text = formatTimerDisplay(displayMs),
                     style = MaterialTheme.typography.displaySmall.copy(
                         fontFamily = JetBrainsMonoFontFamily,
                         fontSize = 42.sp,
@@ -218,7 +221,11 @@ fun FullScreenTimerScreen(
             }
 
             Text(
-                text = stringResource(R.string.fullscreen_timer_subtitle),
+                text = if (uiState.isStopwatchActive) {
+                    "ستوب وتش نشط — كل ساعة كاملة تزرع شجرة وتُضاف للإحصائيات"
+                } else {
+                    stringResource(R.string.fullscreen_timer_subtitle)
+                },
                 style = MaterialTheme.typography.titleMedium,
                 color = Color(0xFFE2E8F0),
                 textAlign = TextAlign.Center

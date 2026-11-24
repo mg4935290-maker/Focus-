@@ -73,7 +73,16 @@ class BlockedActivity : ComponentActivity() {
         super.onResume()
         isForeground = true
         val prefs = getSharedPreferences(FocusRepository.PREFS_NAME, MODE_PRIVATE)
-        if (System.currentTimeMillis() >= prefs.getLong(FocusRepository.KEY_END, 0L)) {
+        val lockEnabled = prefs.getBoolean(FocusRepository.KEY_STUDY_APP_LOCK_ENABLED, true)
+        val isStopwatch = prefs.getBoolean(FocusRepository.KEY_IS_STOPWATCH, false)
+        val sessionStartMs = prefs.getLong(FocusRepository.KEY_SESSION_START_MS, 0L)
+        val sessionEndMs = prefs.getLong(FocusRepository.KEY_END, 0L)
+        val active = lockEnabled && if (isStopwatch) {
+            sessionStartMs > 0L
+        } else {
+            System.currentTimeMillis() < sessionEndMs
+        }
+        if (!active) {
             finish()
         }
     }

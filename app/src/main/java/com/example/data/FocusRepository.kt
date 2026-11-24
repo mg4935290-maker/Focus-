@@ -8,6 +8,7 @@ import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.content.edit
 import androidx.core.graphics.drawable.toBitmap
 import com.example.BlockerService
 import kotlinx.coroutines.Dispatchers
@@ -70,7 +71,9 @@ data class StudyProgressSnapshot(
     val unplantedStudyMs: Long,
     val trees: List<PlantedTree>,
     val sessionEndMs: Long,
-    val sessionDurationMs: Long
+    val sessionDurationMs: Long,
+    val isStopwatch: Boolean = false,
+    val sessionStartMs: Long = 0L
 )
 
 class FocusRepository(private val context: Context) {
@@ -102,7 +105,7 @@ class FocusRepository(private val context: Context) {
             .mapNotNull { resolveInfo ->
                 val pkg = resolveInfo.activityInfo?.packageName ?: return@mapNotNull null
                 if (pkg == context.packageName) return@mapNotNull null
-                val label = resolveInfo.loadLabel(pm)?.toString()?.ifBlank { pkg } ?: pkg
+                val label = resolveInfo.loadLabel(pm).toString().ifBlank { pkg }
                 val iconBitmap = runCatching {
                     resolveInfo.loadIcon(pm).toBitmap(width = 96, height = 96).asImageBitmap()
                 }.getOrNull()
@@ -118,9 +121,9 @@ class FocusRepository(private val context: Context) {
     }
 
     fun saveUserName(name: String) {
-        prefs.edit()
-            .putString(KEY_USER_NAME, name.trim())
-            .apply()
+        prefs.edit {
+            putString(KEY_USER_NAME, name.trim())
+        }
     }
 
     fun getAllowedPackages(): Set<String> {
@@ -128,9 +131,9 @@ class FocusRepository(private val context: Context) {
     }
 
     fun saveAllowedPackages(allowedPackages: Set<String>) {
-        prefs.edit()
-            .putStringSet(KEY_ALLOWED, allowedPackages.toSet())
-            .apply()
+        prefs.edit {
+            putStringSet(KEY_ALLOWED, allowedPackages.toSet())
+        }
     }
 
     fun getSessionEndMs(): Long {
@@ -151,28 +154,52 @@ class FocusRepository(private val context: Context) {
         val endMs = nowMs + durationMs
         val todayKey = currentDateKey(nowMs)
         val existingStudyDate = prefs.getString(KEY_STUDY_DATE, "") ?: ""
-        val editor = prefs.edit()
-            .putStringSet(KEY_ALLOWED, allowedPackages.toSet())
-            .putLong(KEY_END, endMs)
-            .putLong(KEY_DURATION_MS, durationMs)
-            .putLong(KEY_SESSION_START_MS, nowMs)
-            .putLong(KEY_LAST_ACCOUNTED_MS, nowMs)
-        if (existingStudyDate != todayKey) {
-            editor.putString(KEY_STUDY_DATE, todayKey)
-                .putLong(KEY_DAILY_STUDY_MS, 0L)
+        prefs.edit {
+            putStringSet(KEY_ALLOWED, allowedPackages.toSet())
+            putBoolean(KEY_IS_STOPWATCH, false)
+            putLong(KEY_END, endMs)
+            putLong(KEY_DURATION_MS, durationMs)
+            putLong(KEY_SESSION_START_MS, nowMs)
+            putLong(KEY_LAST_ACCOUNTED_MS, nowMs)
+            if (existingStudyDate != todayKey) {
+                putString(KEY_STUDY_DATE, todayKey)
+                putLong(KEY_DAILY_STUDY_MS, 0L)
+            }
         }
-        editor.apply()
         return endMs to durationMs
+    }
+
+    fun startStopwatchSession(
+        allowedPackages: Set<String>,
+        nowMs: Long = System.currentTimeMillis()
+    ): Long {
+        syncStudyProgress(nowMs)
+        val todayKey = currentDateKey(nowMs)
+        val existingStudyDate = prefs.getString(KEY_STUDY_DATE, "") ?: ""
+        prefs.edit {
+            putStringSet(KEY_ALLOWED, allowedPackages.toSet())
+            putBoolean(KEY_IS_STOPWATCH, true)
+            putLong(KEY_END, Long.MAX_VALUE)
+            putLong(KEY_DURATION_MS, 0L)
+            putLong(KEY_SESSION_START_MS, nowMs)
+            putLong(KEY_LAST_ACCOUNTED_MS, nowMs)
+            if (existingStudyDate != todayKey) {
+                putString(KEY_STUDY_DATE, todayKey)
+                putLong(KEY_DAILY_STUDY_MS, 0L)
+            }
+        }
+        return nowMs
     }
 
     fun cancelSession(nowMs: Long = System.currentTimeMillis()): StudyProgressSnapshot {
         syncStudyProgress(nowMs)
-        prefs.edit()
-            .putLong(KEY_END, 0L)
-            .putLong(KEY_DURATION_MS, 0L)
-            .putLong(KEY_SESSION_START_MS, 0L)
-            .putLong(KEY_LAST_ACCOUNTED_MS, 0L)
-            .apply()
+        prefs.edit {
+            putBoolean(KEY_IS_STOPWATCH, false)
+            putLong(KEY_END, 0L)
+            putLong(KEY_DURATION_MS, 0L)
+            putLong(KEY_SESSION_START_MS, 0L)
+            putLong(KEY_LAST_ACCOUNTED_MS, 0L)
+        }
         return getStudyProgressSnapshot(nowMs)
     }
 
@@ -189,6 +216,7 @@ class FocusRepository(private val context: Context) {
         var unplantedStudyMs = prefs.getLong(KEY_UNPLANTED_STUDY_MS, 0L)
         val trees = loadTrees().toMutableList()
 
+        var isStopwatch = prefs.getBoolean(KEY_IS_STOPWATCH, false)
         val sessionStartMs = prefs.getLong(KEY_SESSION_START_MS, 0L)
         val sessionEndMs = prefs.getLong(KEY_END, 0L)
         val lastAccountedMs = prefs.getLong(KEY_LAST_ACCOUNTED_MS, 0L)
@@ -199,7 +227,35 @@ class FocusRepository(private val context: Context) {
         var newSessionDurationMs = prefs.getLong(KEY_DURATION_MS, 0L)
         var newLastAccountedMs = lastAccountedMs
 
-        if (sessionStartMs > 0L && sessionEndMs > sessionStartMs) {
+        if (isStopwatch && sessionStartMs > 0L) {
+            val effectiveEnd = nowMs.coerceAtLeast(lastAccountedMs)
+            if (effectiveEnd > lastAccountedMs) {
+                val deltaMs = effectiveEnd - lastAccountedMs
+                val dayStart = startOfDayMs(nowMs)
+                val todayDeltaMs = if (lastAccountedMs < dayStart) {
+                    (effectiveEnd - dayStart).coerceAtLeast(0L)
+                } else {
+                    deltaMs
+                }
+                dailyStudyMs += todayDeltaMs
+                totalStudyMs += deltaMs
+                unplantedStudyMs += deltaMs
+
+                while (unplantedStudyMs >= ONE_HOUR_MS) {
+                    unplantedStudyMs -= ONE_HOUR_MS
+                    val plantedAt = effectiveEnd - unplantedStudyMs
+                    val variant = trees.size % 4
+                    trees.add(
+                        PlantedTree(
+                            id = UUID.randomUUID().toString(),
+                            plantedAtMs = plantedAt,
+                            variant = variant
+                        )
+                    )
+                }
+                newLastAccountedMs = effectiveEnd
+            }
+        } else if (sessionStartMs > 0L && sessionEndMs > sessionStartMs) {
             val effectiveEnd = minOf(nowMs, sessionEndMs)
             if (effectiveEnd > lastAccountedMs) {
                 val deltaMs = effectiveEnd - lastAccountedMs
@@ -229,6 +285,7 @@ class FocusRepository(private val context: Context) {
             }
 
             if (nowMs >= sessionEndMs) {
+                isStopwatch = false
                 newSessionStartMs = 0L
                 newSessionEndMs = 0L
                 newSessionDurationMs = 0L
@@ -236,17 +293,18 @@ class FocusRepository(private val context: Context) {
             }
         }
 
-        val editor = prefs.edit()
-            .putString(KEY_STUDY_DATE, todayKey)
-            .putLong(KEY_DAILY_STUDY_MS, dailyStudyMs)
-            .putLong(KEY_TOTAL_STUDY_MS, totalStudyMs)
-            .putLong(KEY_UNPLANTED_STUDY_MS, unplantedStudyMs)
-            .putString(KEY_TREES_JSON, encodeTrees(trees))
-            .putLong(KEY_SESSION_START_MS, newSessionStartMs)
-            .putLong(KEY_END, newSessionEndMs)
-            .putLong(KEY_DURATION_MS, newSessionDurationMs)
-            .putLong(KEY_LAST_ACCOUNTED_MS, newLastAccountedMs)
-        editor.apply()
+        prefs.edit {
+            putString(KEY_STUDY_DATE, todayKey)
+            putLong(KEY_DAILY_STUDY_MS, dailyStudyMs)
+            putLong(KEY_TOTAL_STUDY_MS, totalStudyMs)
+            putLong(KEY_UNPLANTED_STUDY_MS, unplantedStudyMs)
+            putString(KEY_TREES_JSON, encodeTrees(trees))
+            putBoolean(KEY_IS_STOPWATCH, isStopwatch)
+            putLong(KEY_SESSION_START_MS, newSessionStartMs)
+            putLong(KEY_END, newSessionEndMs)
+            putLong(KEY_DURATION_MS, newSessionDurationMs)
+            putLong(KEY_LAST_ACCOUNTED_MS, newLastAccountedMs)
+        }
 
         return StudyProgressSnapshot(
             dailyStudyMs = dailyStudyMs,
@@ -254,7 +312,50 @@ class FocusRepository(private val context: Context) {
             unplantedStudyMs = unplantedStudyMs,
             trees = trees,
             sessionEndMs = newSessionEndMs,
-            sessionDurationMs = newSessionDurationMs
+            sessionDurationMs = newSessionDurationMs,
+            isStopwatch = isStopwatch,
+            sessionStartMs = newSessionStartMs
+        )
+    }
+
+    @Synchronized
+    fun creditExternalStudyProgress(durationMs: Long, nowMs: Long = System.currentTimeMillis()): StudyProgressSnapshot {
+        val current = syncStudyProgress(nowMs)
+        if (durationMs <= 0L) return current
+        val todayKey = currentDateKey(nowMs)
+        val dailyStudyMs = current.dailyStudyMs + durationMs
+        val totalStudyMs = current.totalStudyMs + durationMs
+        var unplantedStudyMs = current.unplantedStudyMs + durationMs
+        val trees = current.trees.toMutableList()
+
+        while (unplantedStudyMs >= ONE_HOUR_MS) {
+            unplantedStudyMs -= ONE_HOUR_MS
+            trees.add(
+                PlantedTree(
+                    id = UUID.randomUUID().toString(),
+                    plantedAtMs = nowMs - unplantedStudyMs,
+                    variant = trees.size % 4
+                )
+            )
+        }
+
+        prefs.edit {
+            putString(KEY_STUDY_DATE, todayKey)
+            putLong(KEY_DAILY_STUDY_MS, dailyStudyMs)
+            putLong(KEY_TOTAL_STUDY_MS, totalStudyMs)
+            putLong(KEY_UNPLANTED_STUDY_MS, unplantedStudyMs)
+            putString(KEY_TREES_JSON, encodeTrees(trees))
+        }
+
+        return StudyProgressSnapshot(
+            dailyStudyMs = dailyStudyMs,
+            totalStudyMs = totalStudyMs,
+            unplantedStudyMs = unplantedStudyMs,
+            trees = trees,
+            sessionEndMs = current.sessionEndMs,
+            sessionDurationMs = current.sessionDurationMs,
+            isStopwatch = current.isStopwatch,
+            sessionStartMs = current.sessionStartMs
         )
     }
 
@@ -272,7 +373,9 @@ class FocusRepository(private val context: Context) {
             unplantedStudyMs = prefs.getLong(KEY_UNPLANTED_STUDY_MS, 0L),
             trees = loadTrees(),
             sessionEndMs = prefs.getLong(KEY_END, 0L),
-            sessionDurationMs = prefs.getLong(KEY_DURATION_MS, 0L)
+            sessionDurationMs = prefs.getLong(KEY_DURATION_MS, 0L),
+            isStopwatch = prefs.getBoolean(KEY_IS_STOPWATCH, false),
+            sessionStartMs = prefs.getLong(KEY_SESSION_START_MS, 0L)
         )
     }
 
@@ -313,7 +416,7 @@ class FocusRepository(private val context: Context) {
         val todayKey = currentDateKey(nowMs)
         val shownDate = prefs.getString(KEY_ACHIEVEMENT_TASKS_DATE, null)
         if (shownDate == todayKey) return false
-        prefs.edit().putString(KEY_ACHIEVEMENT_TASKS_DATE, todayKey).apply()
+        prefs.edit { putString(KEY_ACHIEVEMENT_TASKS_DATE, todayKey) }
         return true
     }
 
@@ -325,7 +428,7 @@ class FocusRepository(private val context: Context) {
         val todayKey = currentDateKey(nowMs)
         val shownDate = prefs.getString(KEY_ACHIEVEMENT_HOURS_DATE, null)
         if (shownDate == todayKey) return false
-        prefs.edit().putString(KEY_ACHIEVEMENT_HOURS_DATE, todayKey).apply()
+        prefs.edit { putString(KEY_ACHIEVEMENT_HOURS_DATE, todayKey) }
         return true
     }
 
@@ -362,10 +465,10 @@ class FocusRepository(private val context: Context) {
                 .put("isCompleted", task.isCompleted)
             array.put(obj)
         }
-        prefs.edit()
-            .putString(KEY_DAILY_TASKS, array.toString())
-            .putString(KEY_TASKS_DATE, todayKey)
-            .apply()
+        prefs.edit {
+            putString(KEY_DAILY_TASKS, array.toString())
+            putString(KEY_TASKS_DATE, todayKey)
+        }
     }
 
     // Audio & Full-Screen Timer Preferences
@@ -395,7 +498,7 @@ class FocusRepository(private val context: Context) {
                     .put("name", track.displayName)
             )
         }
-        prefs.edit().putString(KEY_UPLOADED_TRACKS, array.toString()).apply()
+        prefs.edit { putString(KEY_UPLOADED_TRACKS, array.toString()) }
     }
 
     fun getSelectedBuiltInSoundId(): String {
@@ -407,16 +510,16 @@ class FocusRepository(private val context: Context) {
     }
 
     fun saveSelectedBuiltInSound(sound: BuiltInSound) {
-        prefs.edit()
-            .putString(KEY_SELECTED_SOUND_ID, sound.id)
-            .remove(KEY_SELECTED_UPLOADED_ID)
-            .apply()
+        prefs.edit {
+            putString(KEY_SELECTED_SOUND_ID, sound.id)
+            remove(KEY_SELECTED_UPLOADED_ID)
+        }
     }
 
     fun saveSelectedUploadedTrack(trackId: String) {
-        prefs.edit()
-            .putString(KEY_SELECTED_UPLOADED_ID, trackId)
-            .apply()
+        prefs.edit {
+            putString(KEY_SELECTED_UPLOADED_ID, trackId)
+        }
     }
 
     fun getAudioVolume(): Float {
@@ -424,7 +527,7 @@ class FocusRepository(private val context: Context) {
     }
 
     fun saveAudioVolume(volume: Float) {
-        prefs.edit().putFloat(KEY_AUDIO_VOLUME, volume.coerceIn(0f, 1f)).apply()
+        prefs.edit { putFloat(KEY_AUDIO_VOLUME, volume.coerceIn(0f, 1f)) }
     }
 
     fun isAudioLoopEnabled(): Boolean {
@@ -432,7 +535,7 @@ class FocusRepository(private val context: Context) {
     }
 
     fun saveAudioLoopEnabled(loop: Boolean) {
-        prefs.edit().putBoolean(KEY_AUDIO_LOOP, loop).apply()
+        prefs.edit { putBoolean(KEY_AUDIO_LOOP, loop) }
     }
 
     fun isAutoFullscreenTimerEnabled(): Boolean {
@@ -440,10 +543,20 @@ class FocusRepository(private val context: Context) {
     }
 
     fun saveAutoFullscreenTimerEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_AUTO_FULLSCREEN_TIMER, enabled).apply()
+        prefs.edit { putBoolean(KEY_AUTO_FULLSCREEN_TIMER, enabled) }
+    }
+
+    fun isStudyAppLockEnabled(): Boolean {
+        return prefs.getBoolean(KEY_STUDY_APP_LOCK_ENABLED, true)
+    }
+
+    fun saveStudyAppLockEnabled(enabled: Boolean) {
+        prefs.edit { putBoolean(KEY_STUDY_APP_LOCK_ENABLED, enabled) }
     }
 
     fun isBlockerServiceEnabled(): Boolean {
+        if (BlockerService.isServiceConnected) return true
+
         val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager
         val expectedComponent = ComponentName(context, BlockerService::class.java)
         val enabledByManager = am
@@ -490,6 +603,8 @@ class FocusRepository(private val context: Context) {
         const val KEY_AUDIO_VOLUME = "audio_volume"
         const val KEY_AUDIO_LOOP = "audio_loop"
         const val KEY_AUTO_FULLSCREEN_TIMER = "auto_fullscreen_timer"
+        const val KEY_STUDY_APP_LOCK_ENABLED = "study_app_lock_enabled"
+        const val KEY_IS_STOPWATCH = "is_stopwatch"
 
         const val ONE_HOUR_MS = 60L * 60_000L
         const val FOUR_HOURS_MS = 4L * ONE_HOUR_MS

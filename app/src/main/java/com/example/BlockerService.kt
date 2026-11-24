@@ -59,8 +59,17 @@ class BlockerService : AccessibilityService() {
         }
 
         val prefs = getSharedPreferences(FocusRepository.PREFS_NAME, MODE_PRIVATE)
+        val lockEnabled = prefs.getBoolean(FocusRepository.KEY_STUDY_APP_LOCK_ENABLED, true)
         val now = System.currentTimeMillis()
-        if (now >= prefs.getLong(FocusRepository.KEY_END, 0L)) {
+        val isStopwatch = prefs.getBoolean(FocusRepository.KEY_IS_STOPWATCH, false)
+        val sessionStartMs = prefs.getLong(FocusRepository.KEY_SESSION_START_MS, 0L)
+        val sessionEndMs = prefs.getLong(FocusRepository.KEY_END, 0L)
+        val isSessionActive = lockEnabled && if (isStopwatch) {
+            sessionStartMs > 0L
+        } else {
+            now < sessionEndMs
+        }
+        if (!isSessionActive) {
             BlockedActivity.dismissIfOpen()
             return
         }
@@ -104,5 +113,26 @@ class BlockerService : AccessibilityService() {
         startActivity(blockIntent)
     }
 
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        isServiceConnected = true
+    }
+
+    override fun onUnbind(intent: Intent?): Boolean {
+        isServiceConnected = false
+        return super.onUnbind(intent)
+    }
+
+    override fun onDestroy() {
+        isServiceConnected = false
+        super.onDestroy()
+    }
+
     override fun onInterrupt() {}
+
+    companion object {
+        @Volatile
+        var isServiceConnected: Boolean = false
+            private set
+    }
 }

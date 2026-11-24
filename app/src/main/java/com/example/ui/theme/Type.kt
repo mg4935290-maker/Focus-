@@ -15,6 +15,11 @@ val CairoFontFamily = FontFamily(
     Font(R.font.cairo, FontWeight.Bold)
 )
 
+val AmiriFontFamily = FontFamily(
+    Font(R.font.amiri, FontWeight.Normal),
+    Font(R.font.amiri, FontWeight.Bold)
+)
+
 val JetBrainsMonoFontFamily = FontFamily(
     Font(R.font.jetbrains_mono, FontWeight.Normal),
     Font(R.font.jetbrains_mono, FontWeight.Bold)

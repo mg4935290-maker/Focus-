@@ -22,7 +22,8 @@ class ExampleRobolectricTest {
     @Test
     fun `required exact strings match specification`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        assertEquals("Focus Lock", context.getString(R.string.app_name))
+        assertEquals("Quramer", context.getString(R.string.app_name))
+        assertEquals("Focus Your Time. Connect With Quran.", context.getString(R.string.app_slogan))
         assertEquals("created by Galileo", context.getString(R.string.created_by_galileo))
         assertEquals(
             "حلمك يستاهل انك تحارب عشانه ،ارجع ذاكر🩵🩵",

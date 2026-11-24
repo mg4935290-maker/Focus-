@@ -1,6 +1,6 @@
 {
-  "name": "Focus Lock",
-  "description": "تطبيق قفل التركيز لمنع فتح التطبيقات غير المسموحة أثناء جلسة التركيز",
+  "name": "Quramer",
+  "description": "Quramer — Focus Your Time. Connect With Quran. تطبيق متكامل للتركيز والمذاكرة وقراءة واستماع القرآن الكريم.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

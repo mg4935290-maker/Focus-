@@ -1,8 +1,9 @@
 <resources>
-    <string name="app_name">Focus Lock</string>
+    <string name="app_name">Quramer</string>
+    <string name="app_slogan">Focus Your Time. Connect With Quran.</string>
     <string name="service_desc">يمنع فتح التطبيقات غير المسموحة أثناء جلسة التركيز</string>
 
-    <string name="app_subtitle">مساحتك الهادئة للمذاكرة والإنجاز</string>
+    <string name="app_subtitle">ركّز وقتك… وتدبّر قرآنك بخشوع وهدوء</string>
     <string name="created_by_galileo">created by Galileo</string>
 
     <!-- Salawat Automatic Reminder -->
@@ -24,10 +25,13 @@
     <string name="stat_next_tree_hint">القادمة: %1$d / 60 د</string>
 
     <!-- Navigation Tabs -->
-    <string name="tab_focus">التركيز</string>
+    <string name="tab_home">الرئيسية</string>
+    <string name="tab_focus">المذاكرة</string>
+    <string name="tab_quran">القرآن</string>
     <string name="tab_audio">الأصوات</string>
     <string name="tab_tasks">المهام</string>
     <string name="tab_farm">المزرعة</string>
+    <string name="tab_stats">الإحصائيات</string>
 
     <!-- Welcome / Name Screen -->
     <string name="welcome_title">مرحباً بك في رحلة المذاكرة</string>
@@ -35,9 +39,10 @@
     <string name="welcome_name_label">اكتب اسمك</string>
     <string name="welcome_name_hint">مثال: أحمد، سارة…</string>
     <string name="welcome_name_error">من فضلك اكتب اسمك أولاً</string>
-    <string name="welcome_continue_button">ابدأ المذاكرة الآن</string>
+    <string name="welcome_continue_button">ابدأ الآن</string>
     <string name="welcome_save_name_button">حفظ الاسم والمتابعة</string>
     <string name="welcome_quote">كل دقيقة تركيز اليوم هي خطوة واثقة نحو هدفك.</string>
+    <string name="intro_lets_start_button">يلا نبدأ</string>
 
     <string name="greeting_user_study">أهلاً يا %1$s — وقت المذاكرة والإنجاز!</string>
     <string name="cd_edit_name">تعديل الاسم</string>
@@ -169,4 +174,27 @@
     <string name="cd_app_icon">أيقونة %1$s</string>
     <string name="cd_clear_search">مسح البحث</string>
     <string name="cd_service_status_icon">حالة خدمة الحظر</string>
+
+    <!-- Quramer Hub & Timer / Stopwatch -->
+    <string name="timer_mode_title">تايمر (Timer)</string>
+    <string name="timer_mode_desc">حدّد الساعات والدقائق مع قفل التطبيقات وزراعة شجرة كل ساعة</string>
+    <string name="stopwatch_mode_title">ستوب وتش (Stopwatch)</string>
+    <string name="stopwatch_mode_desc">عدّاد تصاعدي يقفل التطبيقات، يضيف للإحصائيات، ويزرع شجرة كل ساعة</string>
+    <string name="stopwatch_active_title">جلسة ستوب وتش نشطة الآن</string>
+    <string name="stopwatch_mode_hint">يبدأ العد من الصفر بدون وقت محدد، مع قفل التطبيقات المشتتة، وإضافة الوقت للإحصائيات، وزراعة شجرة مع كل ساعة كاملة.</string>
+    <string name="quramer_smart_select_cta">SMART SELECT — اختر السور حسب وقتك</string>
+    <string name="quran_subtab_smart">الاختيار الذكي</string>
+    <string name="quran_subtab_reader">المصحف</string>
+    <string name="quran_subtab_library">المكتبة والملفات</string>
+    <string name="quran_subtab_player">المشغل والقراء</string>
+    <string name="smart_select_button">SMART SELECT</string>
+    <string name="quran_session_start">بدء جلسة القرآن</string>
+    <string name="quran_reselect">إعادة الاختيار</string>
+    <string name="quran_edit_surahs">تعديل السور</string>
+    <string name="quran_upload_multi">رفع ملفات متعددة</string>
+    <string name="quran_mode_reading">قراءة</string>
+    <string name="quran_mode_listening">استماع</string>
+    <string name="quran_mode_combined">قراءة + استماع</string>
+    <string name="quran_complete_surah">إكمال السورة</string>
+    <string name="quran_end_session">إنهاء الجلسة</string>
 </resources>

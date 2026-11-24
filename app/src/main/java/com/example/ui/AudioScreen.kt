@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -28,7 +29,6 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.UploadFile
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -339,7 +339,7 @@ private fun AudioPlayerControlCard(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Filled.VolumeUp,
+                    imageVector = Icons.AutoMirrored.Filled.VolumeUp,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary
                 )

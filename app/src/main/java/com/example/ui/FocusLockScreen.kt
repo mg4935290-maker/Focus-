@@ -33,6 +33,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CheckCircle
@@ -40,6 +42,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -53,10 +56,21 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Park
 import androidx.compose.material.icons.outlined.TaskAlt
+import androidx.compose.material3.FilterChip
+import com.example.quran.ui.QuranContainerScreen
+import com.example.quran.ui.QuranFullPlayerModal
+import com.example.quran.ui.QuranMiniPlayerBar
+import com.example.quran.ui.QuranStatsAndGamificationScreen
+import com.example.quran.ui.QuranSubTab
+import com.example.quran.ui.QuranUiState
+import com.example.quran.ui.QuranViewModel
+import com.example.quran.ui.QuramerHubScreen
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -112,14 +126,25 @@ import java.util.Locale
 @Composable
 fun FocusLockScreen(
     uiState: FocusUiState,
+    quranUiState: QuranUiState,
+    quranViewModel: QuranViewModel,
     snackbarHostState: SnackbarHostState,
     needsNotificationPermission: Boolean,
     onRequestNotificationPermission: () -> Unit,
     onSelectTab: (MainTab) -> Unit,
+    onSelectStudySubSection: (StudySubSection) -> Unit,
+    onSelectTasksSubSection: (TasksSubSection) -> Unit,
     onEditNameClick: () -> Unit,
     onEnableServiceClick: () -> Unit,
+    onStudyAppLockChange: (Boolean) -> Unit,
+    onOpenBatterySettingsClick: () -> Unit,
+    onDismissAccessibilityOptional: () -> Unit,
+    onStartWithoutAppLock: () -> Unit,
+    onOpenAccessibilityFromDialog: () -> Unit,
     onHoursInputChange: (String) -> Unit,
     onMinutesInputChange: (String) -> Unit,
+    onSelectTimerMode: (SessionTimerMode) -> Unit,
+    onOpenWithTimerMode: (SessionTimerMode) -> Unit,
     onAutoFullscreenChange: (Boolean) -> Unit,
     onOpenFullScreenTimer: () -> Unit,
     onCloseFullScreenTimer: () -> Unit,
@@ -148,10 +173,28 @@ fun FocusLockScreen(
     onToggleAudioPlayback: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    if (uiState.showAccessibilityOptionalDialog) {
+        AccessibilityOptionalDialog(
+            onStartWithoutLock = onStartWithoutAppLock,
+            onOpenSettings = onOpenAccessibilityFromDialog,
+            onDismiss = onDismissAccessibilityOptional
+        )
+    }
+
+    quranUiState.pendingPlaySuggestion?.let { suggestion ->
+        QuranPlaySuggestionDialog(
+            title = suggestion.title,
+            message = suggestion.message,
+            onAccept = quranViewModel::acceptPlaySuggestion,
+            onDecline = quranViewModel::declinePlaySuggestion
+        )
+    }
+
     if (uiState.showStartConfirmDialog) {
         ConfirmAllowedAppsDialog(
             hours = uiState.hoursInput.toLongOrNull() ?: 0L,
             minutes = uiState.minutesInput.toLongOrNull() ?: 0L,
+            isStopwatch = uiState.selectedTimerMode == SessionTimerMode.STOPWATCH,
             selectedApps = uiState.selectedAllowedApps,
             allowedCount = uiState.allowedPackages.size,
             onConfirm = onConfirmStartSession,
@@ -199,6 +242,24 @@ fun FocusLockScreen(
         return
     }
 
+    if (quranUiState.isFullPlayerVisible) {
+        QuranFullPlayerModal(
+            state = quranUiState,
+            onClose = quranViewModel::closeFullPlayer,
+            onPlayTracks = quranViewModel::playTracks,
+            onTogglePlayPause = quranViewModel::togglePlayPause,
+            onSeekTo = quranViewModel::seekTo,
+            onSeekBack10s = quranViewModel::seekBack10s,
+            onSeekForward10s = quranViewModel::seekForward10s,
+            onPrevSurah = quranViewModel::previousSurahAudio,
+            onNextSurah = quranViewModel::nextSurahAudio,
+            onSpeedSelected = quranViewModel::setPlaybackSpeed,
+            onCycleRepeat = quranViewModel::cycleRepeatMode,
+            onToggleShuffle = quranViewModel::toggleShuffle
+        )
+        return
+    }
+
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val useNavRail = maxWidth >= 840.dp
 
@@ -210,7 +271,17 @@ fun FocusLockScreen(
             bottomBar = {
                 if (!useNavRail) {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        if (uiState.selectedTab == MainTab.FOCUS) {
+                        if (quranUiState.playbackState.hasActiveTrack) {
+                            QuranMiniPlayerBar(
+                                playback = quranUiState.playbackState,
+                                surahs = quranUiState.surahs,
+                                onTogglePlayPause = quranViewModel::togglePlayPause,
+                                onOpenFullPlayer = quranViewModel::openFullPlayer
+                            )
+                        }
+                        if (uiState.selectedTab == MainTab.FOCUS &&
+                            uiState.studySubSection == StudySubSection.FOCUS_LOCK
+                        ) {
                             BottomSessionActionPanel(
                                 isSessionActive = uiState.isSessionActive,
                                 onStartSessionClick = onStartSessionClick,
@@ -258,57 +329,186 @@ fun FocusLockScreen(
                             .fillMaxWidth()
                     ) {
                         when (uiState.selectedTab) {
-                            MainTab.FOCUS -> {
-                                FocusSessionTabContent(
-                                    uiState = uiState,
-                                    needsNotificationPermission = needsNotificationPermission,
-                                    showInlineActionButton = useNavRail,
-                                    onRequestNotificationPermission = onRequestNotificationPermission,
+                            MainTab.HOME -> {
+                                QuramerHubScreen(
+                                    focusState = uiState,
+                                    quranState = quranUiState,
                                     onEditNameClick = onEditNameClick,
-                                    onEnableServiceClick = onEnableServiceClick,
-                                    onHoursInputChange = onHoursInputChange,
-                                    onMinutesInputChange = onMinutesInputChange,
-                                    onAutoFullscreenChange = onAutoFullscreenChange,
-                                    onOpenFullScreenTimer = onOpenFullScreenTimer,
-                                    onSearchQueryChange = onSearchQueryChange,
-                                    onToggleApp = onToggleApp,
-                                    onSelectAllFiltered = onSelectAllFiltered,
-                                    onClearAllFiltered = onClearAllFiltered,
-                                    onConfirmAllowedApps = onConfirmAllowedApps,
-                                    onStartSessionClick = onStartSessionClick,
-                                    onCancelSessionClick = onRequestCancelSession
+                                    onOpenTimerMode = { onOpenWithTimerMode(SessionTimerMode.TIMER) },
+                                    onOpenStopwatchMode = { onOpenWithTimerMode(SessionTimerMode.STOPWATCH) },
+                                    onOpenSmartTimer = {
+                                        quranViewModel.selectSubTab(QuranSubTab.SMART_TIMER)
+                                        onSelectTab(MainTab.QURAN)
+                                    },
+                                    onResumeLastReading = {
+                                        quranViewModel.openSurahInReader(quranUiState.profile.lastViewedSurah)
+                                        quranViewModel.selectSubTab(QuranSubTab.READER)
+                                        onSelectTab(MainTab.QURAN)
+                                    },
+                                    onOpenLibrary = {
+                                        quranViewModel.selectSubTab(QuranSubTab.LIBRARY)
+                                        onSelectTab(MainTab.QURAN)
+                                    },
+                                    onOpenTreeFarm = { onSelectTasksSubSection(TasksSubSection.TREE_FARM) },
+                                    onOpenStats = { onSelectTab(MainTab.STATS) },
+                                    onAcceptHubQuranSuggestion = {
+                                        if (quranUiState.audioTracks.isNotEmpty()) {
+                                            quranViewModel.proposeQuranListeningForStudyOrHub()
+                                        } else {
+                                            quranViewModel.selectSubTab(QuranSubTab.SMART_TIMER)
+                                            onSelectTab(MainTab.QURAN)
+                                        }
+                                    },
+                                    onDismissHubQuranSuggestion = quranViewModel::dismissHubSuggestion
                                 )
                             }
-                            MainTab.AUDIO -> {
-                                AudioTabContent(
-                                    uiState = uiState,
-                                    needsNotificationPermission = needsNotificationPermission,
-                                    onRequestNotificationPermission = onRequestNotificationPermission,
-                                    onSelectBuiltInSound = onSelectBuiltInSound,
-                                    onSelectUploadedTrack = onSelectUploadedTrack,
-                                    onUploadAudioClick = onUploadAudioClick,
-                                    onDeleteUploadedTrack = onDeleteUploadedTrack,
-                                    onVolumeChange = onAudioVolumeChange,
-                                    onLoopToggle = onAudioLoopToggle,
-                                    onTogglePlayback = onToggleAudioPlayback
+                            MainTab.FOCUS -> {
+                                Column(modifier = Modifier.fillMaxSize()) {
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.surface,
+                                        tonalElevation = 1.dp,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            FilterChip(
+                                                selected = uiState.studySubSection == StudySubSection.FOCUS_LOCK,
+                                                onClick = { onSelectStudySubSection(StudySubSection.FOCUS_LOCK) },
+                                                label = { Text(stringResource(R.string.tab_focus)) },
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .testTag("study_subtab_lock")
+                                            )
+                                            FilterChip(
+                                                selected = uiState.studySubSection == StudySubSection.STUDY_AUDIO,
+                                                onClick = { onSelectStudySubSection(StudySubSection.STUDY_AUDIO) },
+                                                label = { Text(stringResource(R.string.tab_audio)) },
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .testTag("study_subtab_audio")
+                                            )
+                                        }
+                                    }
+
+                                    when (uiState.studySubSection) {
+                                        StudySubSection.FOCUS_LOCK -> {
+                                            FocusSessionTabContent(
+                                                uiState = uiState,
+                                                needsNotificationPermission = needsNotificationPermission,
+                                                showInlineActionButton = useNavRail,
+                                                onRequestNotificationPermission = onRequestNotificationPermission,
+                                                onEditNameClick = onEditNameClick,
+                                                onEnableServiceClick = onEnableServiceClick,
+                                                onStudyAppLockChange = onStudyAppLockChange,
+                                                onOpenBatterySettingsClick = onOpenBatterySettingsClick,
+                                                onHoursInputChange = onHoursInputChange,
+                                                onMinutesInputChange = onMinutesInputChange,
+                                                onSelectTimerMode = onSelectTimerMode,
+                                                onAutoFullscreenChange = onAutoFullscreenChange,
+                                                onOpenFullScreenTimer = onOpenFullScreenTimer,
+                                                onSearchQueryChange = onSearchQueryChange,
+                                                onToggleApp = onToggleApp,
+                                                onSelectAllFiltered = onSelectAllFiltered,
+                                                onClearAllFiltered = onClearAllFiltered,
+                                                onConfirmAllowedApps = onConfirmAllowedApps,
+                                                onStartSessionClick = onStartSessionClick,
+                                                onCancelSessionClick = onRequestCancelSession
+                                            )
+                                        }
+                                        StudySubSection.STUDY_AUDIO -> {
+                                            AudioTabContent(
+                                                uiState = uiState,
+                                                needsNotificationPermission = needsNotificationPermission,
+                                                onRequestNotificationPermission = onRequestNotificationPermission,
+                                                onSelectBuiltInSound = onSelectBuiltInSound,
+                                                onSelectUploadedTrack = onSelectUploadedTrack,
+                                                onUploadAudioClick = onUploadAudioClick,
+                                                onDeleteUploadedTrack = onDeleteUploadedTrack,
+                                                onVolumeChange = onAudioVolumeChange,
+                                                onLoopToggle = onAudioLoopToggle,
+                                                onTogglePlayback = onToggleAudioPlayback
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            MainTab.QURAN -> {
+                                QuranContainerScreen(
+                                    quranState = quranUiState,
+                                    quranViewModel = quranViewModel
                                 )
                             }
                             MainTab.TASKS -> {
-                                DailyTasksTabContent(
-                                    uiState = uiState,
-                                    onNewTaskInputChange = onNewTaskInputChange,
-                                    onAddTaskClick = onAddTaskClick,
-                                    onToggleTask = onToggleTask,
-                                    onDeleteTask = onDeleteTask
-                                )
+                                Column(modifier = Modifier.fillMaxSize()) {
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.surface,
+                                        tonalElevation = 1.dp,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            FilterChip(
+                                                selected = uiState.tasksSubSection == TasksSubSection.DAILY_TASKS,
+                                                onClick = { onSelectTasksSubSection(TasksSubSection.DAILY_TASKS) },
+                                                label = { Text(stringResource(R.string.tab_tasks)) },
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .testTag("tasks_subtab_tasks")
+                                            )
+                                            FilterChip(
+                                                selected = uiState.tasksSubSection == TasksSubSection.TREE_FARM,
+                                                onClick = { onSelectTasksSubSection(TasksSubSection.TREE_FARM) },
+                                                label = { Text(stringResource(R.string.tab_farm)) },
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .testTag("tasks_subtab_farm")
+                                            )
+                                        }
+                                    }
+
+                                    when (uiState.tasksSubSection) {
+                                        TasksSubSection.DAILY_TASKS -> {
+                                            DailyTasksTabContent(
+                                                uiState = uiState,
+                                                onNewTaskInputChange = onNewTaskInputChange,
+                                                onAddTaskClick = onAddTaskClick,
+                                                onToggleTask = onToggleTask,
+                                                onDeleteTask = onDeleteTask
+                                            )
+                                        }
+                                        TasksSubSection.TREE_FARM -> {
+                                            TreeFarmTabContent(uiState = uiState)
+                                        }
+                                    }
+                                }
                             }
-                            MainTab.FARM -> {
-                                TreeFarmTabContent(uiState = uiState)
+                            MainTab.STATS -> {
+                                QuranStatsAndGamificationScreen(
+                                    focusState = uiState,
+                                    quranState = quranUiState,
+                                    onUpdateGoals = quranViewModel::updateGoals
+                                )
                             }
                         }
                     }
 
                     if (useNavRail) {
+                        if (quranUiState.playbackState.hasActiveTrack) {
+                            QuranMiniPlayerBar(
+                                playback = quranUiState.playbackState,
+                                surahs = quranUiState.surahs,
+                                onTogglePlayPause = quranViewModel::togglePlayPause,
+                                onOpenFullPlayer = quranViewModel::openFullPlayer
+                            )
+                        }
                         CreatedByGalileoFooter(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -325,6 +525,7 @@ fun FocusLockScreen(
 private fun ConfirmAllowedAppsDialog(
     hours: Long,
     minutes: Long,
+    isStopwatch: Boolean,
     selectedApps: List<InstalledApp>,
     allowedCount: Int,
     onConfirm: () -> Unit,
@@ -356,10 +557,14 @@ private fun ConfirmAllowedAppsDialog(
                     color = MaterialTheme.colorScheme.primaryContainer
                 ) {
                     Text(
-                        text = stringResource(
-                            R.string.confirm_apps_duration,
-                            formatDurationArabic(totalMs)
-                        ),
+                        text = if (isStopwatch) {
+                            "الوضع: ستوب وتش (عدّاد مفتوح المدة)"
+                        } else {
+                            stringResource(
+                                R.string.confirm_apps_duration,
+                                formatDurationArabic(totalMs)
+                            )
+                        },
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier
@@ -533,6 +738,18 @@ private fun FocusBottomNavigationBar(
 ) {
     NavigationBar {
         NavigationBarItem(
+            selected = selectedTab == MainTab.HOME,
+            onClick = { onSelectTab(MainTab.HOME) },
+            icon = {
+                Icon(
+                    imageVector = if (selectedTab == MainTab.HOME) Icons.Filled.Home else Icons.Outlined.Home,
+                    contentDescription = null
+                )
+            },
+            label = { Text(stringResource(R.string.tab_home), maxLines = 1) },
+            modifier = Modifier.testTag("nav_tab_home")
+        )
+        NavigationBarItem(
             selected = selectedTab == MainTab.FOCUS,
             onClick = { onSelectTab(MainTab.FOCUS) },
             icon = {
@@ -545,20 +762,20 @@ private fun FocusBottomNavigationBar(
             modifier = Modifier.testTag("nav_tab_focus")
         )
         NavigationBarItem(
-            selected = selectedTab == MainTab.AUDIO,
-            onClick = { onSelectTab(MainTab.AUDIO) },
+            selected = selectedTab == MainTab.QURAN,
+            onClick = { onSelectTab(MainTab.QURAN) },
             icon = {
                 Icon(
-                    imageVector = if (selectedTab == MainTab.AUDIO) {
-                        Icons.Filled.MusicNote
+                    imageVector = if (selectedTab == MainTab.QURAN) {
+                        Icons.AutoMirrored.Filled.MenuBook
                     } else {
-                        Icons.Outlined.MusicNote
+                        Icons.AutoMirrored.Outlined.MenuBook
                     },
                     contentDescription = null
                 )
             },
-            label = { Text(stringResource(R.string.tab_audio), maxLines = 1) },
-            modifier = Modifier.testTag("nav_tab_audio")
+            label = { Text(stringResource(R.string.tab_quran), maxLines = 1) },
+            modifier = Modifier.testTag("nav_tab_quran")
         )
         NavigationBarItem(
             selected = selectedTab == MainTab.TASKS,
@@ -573,16 +790,16 @@ private fun FocusBottomNavigationBar(
             modifier = Modifier.testTag("nav_tab_tasks")
         )
         NavigationBarItem(
-            selected = selectedTab == MainTab.FARM,
-            onClick = { onSelectTab(MainTab.FARM) },
+            selected = selectedTab == MainTab.STATS,
+            onClick = { onSelectTab(MainTab.STATS) },
             icon = {
                 Icon(
-                    imageVector = if (selectedTab == MainTab.FARM) Icons.Filled.Park else Icons.Outlined.Park,
+                    imageVector = if (selectedTab == MainTab.STATS) Icons.Filled.BarChart else Icons.Outlined.BarChart,
                     contentDescription = null
                 )
             },
-            label = { Text(stringResource(R.string.tab_farm), maxLines = 1) },
-            modifier = Modifier.testTag("nav_tab_farm")
+            label = { Text(stringResource(R.string.tab_stats), maxLines = 1) },
+            modifier = Modifier.testTag("nav_tab_stats")
         )
     }
 }
@@ -597,6 +814,18 @@ private fun FocusNavigationRail(
     ) {
         Spacer(Modifier.height(16.dp))
         NavigationRailItem(
+            selected = selectedTab == MainTab.HOME,
+            onClick = { onSelectTab(MainTab.HOME) },
+            icon = {
+                Icon(
+                    imageVector = if (selectedTab == MainTab.HOME) Icons.Filled.Home else Icons.Outlined.Home,
+                    contentDescription = null
+                )
+            },
+            label = { Text(stringResource(R.string.tab_home)) },
+            modifier = Modifier.testTag("rail_tab_home")
+        )
+        NavigationRailItem(
             selected = selectedTab == MainTab.FOCUS,
             onClick = { onSelectTab(MainTab.FOCUS) },
             icon = {
@@ -609,20 +838,20 @@ private fun FocusNavigationRail(
             modifier = Modifier.testTag("rail_tab_focus")
         )
         NavigationRailItem(
-            selected = selectedTab == MainTab.AUDIO,
-            onClick = { onSelectTab(MainTab.AUDIO) },
+            selected = selectedTab == MainTab.QURAN,
+            onClick = { onSelectTab(MainTab.QURAN) },
             icon = {
                 Icon(
-                    imageVector = if (selectedTab == MainTab.AUDIO) {
-                        Icons.Filled.MusicNote
+                    imageVector = if (selectedTab == MainTab.QURAN) {
+                        Icons.AutoMirrored.Filled.MenuBook
                     } else {
-                        Icons.Outlined.MusicNote
+                        Icons.AutoMirrored.Outlined.MenuBook
                     },
                     contentDescription = null
                 )
             },
-            label = { Text(stringResource(R.string.tab_audio)) },
-            modifier = Modifier.testTag("rail_tab_audio")
+            label = { Text(stringResource(R.string.tab_quran)) },
+            modifier = Modifier.testTag("rail_tab_quran")
         )
         NavigationRailItem(
             selected = selectedTab == MainTab.TASKS,
@@ -637,16 +866,16 @@ private fun FocusNavigationRail(
             modifier = Modifier.testTag("rail_tab_tasks")
         )
         NavigationRailItem(
-            selected = selectedTab == MainTab.FARM,
-            onClick = { onSelectTab(MainTab.FARM) },
+            selected = selectedTab == MainTab.STATS,
+            onClick = { onSelectTab(MainTab.STATS) },
             icon = {
                 Icon(
-                    imageVector = if (selectedTab == MainTab.FARM) Icons.Filled.Park else Icons.Outlined.Park,
+                    imageVector = if (selectedTab == MainTab.STATS) Icons.Filled.BarChart else Icons.Outlined.BarChart,
                     contentDescription = null
                 )
             },
-            label = { Text(stringResource(R.string.tab_farm)) },
-            modifier = Modifier.testTag("rail_tab_farm")
+            label = { Text(stringResource(R.string.tab_stats)) },
+            modifier = Modifier.testTag("rail_tab_stats")
         )
     }
 }
@@ -659,8 +888,11 @@ private fun FocusSessionTabContent(
     onRequestNotificationPermission: () -> Unit,
     onEditNameClick: () -> Unit,
     onEnableServiceClick: () -> Unit,
+    onStudyAppLockChange: (Boolean) -> Unit,
+    onOpenBatterySettingsClick: () -> Unit,
     onHoursInputChange: (String) -> Unit,
     onMinutesInputChange: (String) -> Unit,
+    onSelectTimerMode: (SessionTimerMode) -> Unit,
     onAutoFullscreenChange: (Boolean) -> Unit,
     onOpenFullScreenTimer: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
@@ -701,16 +933,21 @@ private fun FocusSessionTabContent(
                     }
                     AccessibilityStatusCard(
                         isEnabled = uiState.isServiceEnabled,
-                        onEnableClick = onEnableServiceClick
+                        onEnableClick = onEnableServiceClick,
+                        onBatterySettingsClick = onOpenBatterySettingsClick
                     )
                     DurationSelectorCard(
+                        selectedTimerMode = uiState.selectedTimerMode,
                         hoursInput = uiState.hoursInput,
                         minutesInput = uiState.minutesInput,
                         isSessionActive = uiState.isSessionActive,
                         autoOpenFullscreenTimer = uiState.autoOpenFullscreenTimer,
+                        studyAppLockEnabled = uiState.studyAppLockEnabled,
+                        onSelectTimerMode = onSelectTimerMode,
                         onHoursChange = onHoursInputChange,
                         onMinutesChange = onMinutesInputChange,
-                        onAutoFullscreenChange = onAutoFullscreenChange
+                        onAutoFullscreenChange = onAutoFullscreenChange,
+                        onStudyAppLockChange = onStudyAppLockChange
                     )
                     if (showInlineActionButton) {
                         SessionActionButton(
@@ -773,18 +1010,23 @@ private fun FocusSessionTabContent(
                 item(key = "service_status") {
                     AccessibilityStatusCard(
                         isEnabled = uiState.isServiceEnabled,
-                        onEnableClick = onEnableServiceClick
+                        onEnableClick = onEnableServiceClick,
+                        onBatterySettingsClick = onOpenBatterySettingsClick
                     )
                 }
                 item(key = "duration") {
                     DurationSelectorCard(
+                        selectedTimerMode = uiState.selectedTimerMode,
                         hoursInput = uiState.hoursInput,
                         minutesInput = uiState.minutesInput,
                         isSessionActive = uiState.isSessionActive,
                         autoOpenFullscreenTimer = uiState.autoOpenFullscreenTimer,
+                        studyAppLockEnabled = uiState.studyAppLockEnabled,
+                        onSelectTimerMode = onSelectTimerMode,
                         onHoursChange = onHoursInputChange,
                         onMinutesChange = onMinutesInputChange,
-                        onAutoFullscreenChange = onAutoFullscreenChange
+                        onAutoFullscreenChange = onAutoFullscreenChange,
+                        onStudyAppLockChange = onStudyAppLockChange
                     )
                 }
                 item(key = "apps_header") {
@@ -839,9 +1081,13 @@ private fun FocusHeroCard(
     onEditNameClick: () -> Unit,
     onOpenFullScreenTimer: () -> Unit
 ) {
-    val progress = remember(uiState.remainingMs, uiState.sessionDurationMs) {
-        if (uiState.sessionDurationMs > 0L && uiState.remainingMs > 0L) {
-            (uiState.remainingMs.toFloat() / uiState.sessionDurationMs.toFloat()).coerceIn(0f, 1f)
+    val isStopwatch = uiState.isStopwatchActive
+    val displayMs = if (isStopwatch) uiState.stopwatchElapsedMs else uiState.remainingMs
+    val progress = remember(isStopwatch, displayMs, uiState.sessionDurationMs) {
+        if (isStopwatch) {
+            ((displayMs % 3_600_000L).toFloat() / 3_600_000f).coerceIn(0f, 1f)
+        } else if (uiState.sessionDurationMs > 0L && displayMs > 0L) {
+            (displayMs.toFloat() / uiState.sessionDurationMs.toFloat()).coerceIn(0f, 1f)
         } else {
             0f
         }
@@ -853,7 +1099,7 @@ private fun FocusHeroCard(
 
     Card(
         shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF0E2244)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF06281E)),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.45f)),
         modifier = Modifier
             .fillMaxWidth()
@@ -861,7 +1107,7 @@ private fun FocusHeroCard(
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
             Image(
-                painter = painterResource(id = R.drawable.img_study_hero_1795442323794),
+                painter = painterResource(id = R.drawable.img_quramer_hero_1795552750213),
                 contentDescription = stringResource(R.string.cd_hero_banner),
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -874,8 +1120,8 @@ private fun FocusHeroCard(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color(0xB30B1B3A),
-                                Color(0xE60B1730)
+                                Color(0xB3062018),
+                                Color(0xEA062018)
                             )
                         )
                     )
@@ -1024,26 +1270,40 @@ private fun FocusHeroCard(
 
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 Text(
-                                    text = stringResource(R.string.session_active_title),
+                                    text = stringResource(
+                                        if (isStopwatch) {
+                                            R.string.stopwatch_active_title
+                                        } else {
+                                            R.string.session_active_title
+                                        }
+                                    ),
                                     style = MaterialTheme.typography.labelLarge,
                                     color = ringActiveColor
                                 )
                                 Text(
-                                    text = formatCountdown(uiState.remainingMs),
+                                    text = formatCountdown(displayMs),
                                     style = MaterialTheme.typography.displaySmall,
                                     fontFamily = JetBrainsMonoFontFamily,
                                     color = Color.White,
                                     modifier = Modifier.testTag("countdown_timer_text")
                                 )
-                                val endFormatted = remember(uiState.sessionEndMs) {
-                                    SimpleDateFormat("hh:mm a", Locale.getDefault())
-                                        .format(Date(uiState.sessionEndMs))
+                                if (isStopwatch) {
+                                    Text(
+                                        text = "يتم احتساب الوقت للإحصائيات وزراعة شجرة كل ساعة • التطبيقات مقفولة",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFFCBD5E1)
+                                    )
+                                } else {
+                                    val endFormatted = remember(uiState.sessionEndMs) {
+                                        SimpleDateFormat("hh:mm a", Locale.getDefault())
+                                            .format(Date(uiState.sessionEndMs))
+                                    }
+                                    Text(
+                                        text = stringResource(R.string.session_end_time_label, endFormatted),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFFCBD5E1)
+                                    )
                                 }
-                                Text(
-                                    text = stringResource(R.string.session_end_time_label, endFormatted),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFFCBD5E1)
-                                )
                             }
                         }
 
@@ -1312,9 +1572,91 @@ private fun NotificationPermissionBanner(
 }
 
 @Composable
+private fun AccessibilityOptionalDialog(
+    onStartWithoutLock: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Filled.SettingsAccessibility,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.secondary
+            )
+        },
+        title = {
+            Text("خدمة قفل التطبيقات اختيارية")
+        },
+        text = {
+            Text(
+                "خدمة حظر التطبيقات غير مفعلة حالياً من إعدادات الجهاز. " +
+                    "تقدر تبدأ جلسة المذاكرة والعداد دلوقتي مباشرة من غير ما تروح الإعدادات، أو تفعّل الحظر لو حابب.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onStartWithoutLock,
+                modifier = Modifier.testTag("start_without_lock_button")
+            ) {
+                Text("ابدأ الجلسة الآن (بدون الإعدادات)")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onOpenSettings,
+                modifier = Modifier.testTag("open_accessibility_optional_button")
+            ) {
+                Text("تفعيل القفل من الإعدادات")
+            }
+        }
+    )
+}
+
+@Composable
+private fun QuranPlaySuggestionDialog(
+    title: String,
+    message: String,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDecline,
+        icon = {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
+        title = { Text(title) },
+        text = { Text(message, style = MaterialTheme.typography.bodyMedium) },
+        confirmButton = {
+            Button(
+                onClick = onAccept,
+                modifier = Modifier.testTag("suggestion_accept_button")
+            ) {
+                Text("أه، شغّل الآن")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDecline,
+                modifier = Modifier.testTag("suggestion_decline_button")
+            ) {
+                Text("لا، بدون تشغيل")
+            }
+        }
+    )
+}
+
+@Composable
 private fun AccessibilityStatusCard(
     isEnabled: Boolean,
-    onEnableClick: () -> Unit
+    onEnableClick: () -> Unit,
+    onBatterySettingsClick: () -> Unit
 ) {
     val accentColor = if (isEnabled) StudySuccessGreen else MaterialTheme.colorScheme.secondary
     Card(
@@ -1410,19 +1752,37 @@ private fun AccessibilityStatusCard(
                     Text(text = stringResource(R.string.btn_enable_service))
                 }
             }
+
+            TextButton(
+                onClick = onBatterySettingsClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .minimumInteractiveComponentSize()
+                    .testTag("battery_settings_button")
+            ) {
+                Text(
+                    text = "إذا كان الهاتف يقفل الخدمة تلقائياً: استثناء من توفير البطارية (اختياري)",
+                    style = MaterialTheme.typography.labelMedium,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun DurationSelectorCard(
+    selectedTimerMode: SessionTimerMode,
     hoursInput: String,
     minutesInput: String,
     isSessionActive: Boolean,
     autoOpenFullscreenTimer: Boolean,
+    studyAppLockEnabled: Boolean,
+    onSelectTimerMode: (SessionTimerMode) -> Unit,
     onHoursChange: (String) -> Unit,
     onMinutesChange: (String) -> Unit,
-    onAutoFullscreenChange: (Boolean) -> Unit
+    onAutoFullscreenChange: (Boolean) -> Unit,
+    onStudyAppLockChange: (Boolean) -> Unit
 ) {
     Card(
         shape = MaterialTheme.shapes.medium,
@@ -1452,37 +1812,78 @@ private fun DurationSelectorCard(
                 )
             }
 
+            // Timer vs Stopwatch selector (only two modes: تايمر or ستوب وتش)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                OutlinedTextField(
-                    value = hoursInput,
-                    onValueChange = onHoursChange,
+                FilterChip(
+                    selected = selectedTimerMode == SessionTimerMode.TIMER,
+                    onClick = { onSelectTimerMode(SessionTimerMode.TIMER) },
                     enabled = !isSessionActive,
-                    label = { Text(stringResource(R.string.label_hours)) },
-                    suffix = { Text(stringResource(R.string.unit_hours)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    shape = MaterialTheme.shapes.small,
+                    label = { Text(stringResource(R.string.timer_mode_title)) },
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("hours_input")
+                        .testTag("mode_timer_chip")
                 )
+                FilterChip(
+                    selected = selectedTimerMode == SessionTimerMode.STOPWATCH,
+                    onClick = { onSelectTimerMode(SessionTimerMode.STOPWATCH) },
+                    enabled = !isSessionActive,
+                    label = { Text(stringResource(R.string.stopwatch_mode_title)) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("mode_stopwatch_chip")
+                )
+            }
 
-                OutlinedTextField(
-                    value = minutesInput,
-                    onValueChange = onMinutesChange,
-                    enabled = !isSessionActive,
-                    label = { Text(stringResource(R.string.label_minutes)) },
-                    suffix = { Text(stringResource(R.string.unit_minutes)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            if (selectedTimerMode == SessionTimerMode.TIMER) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedTextField(
+                        value = hoursInput,
+                        onValueChange = onHoursChange,
+                        enabled = !isSessionActive,
+                        label = { Text(stringResource(R.string.label_hours)) },
+                        suffix = { Text(stringResource(R.string.unit_hours)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("hours_input")
+                    )
+
+                    OutlinedTextField(
+                        value = minutesInput,
+                        onValueChange = onMinutesChange,
+                        enabled = !isSessionActive,
+                        label = { Text(stringResource(R.string.label_minutes)) },
+                        suffix = { Text(stringResource(R.string.unit_minutes)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("minutes_input")
+                    )
+                }
+            } else {
+                Surface(
                     shape = MaterialTheme.shapes.small,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("minutes_input")
-                )
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = stringResource(R.string.stopwatch_mode_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
             }
 
             if (isSessionActive) {
@@ -1490,6 +1891,26 @@ private fun DurationSelectorCard(
                     text = stringResource(R.string.duration_locked_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "تفعيل قفل التطبيقات أثناء الجلسة (يمكنك إيقافه لبدء العداد فقط بدون إعدادات)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = studyAppLockEnabled,
+                    onCheckedChange = onStudyAppLockChange,
+                    enabled = !isSessionActive,
+                    modifier = Modifier.testTag("study_app_lock_switch")
                 )
             }
 

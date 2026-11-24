@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Focus Lock"
+rootProject.name = "Quramer"
 
 include(":app")

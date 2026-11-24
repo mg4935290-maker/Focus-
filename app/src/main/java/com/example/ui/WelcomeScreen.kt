@@ -55,7 +55,145 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.ui.theme.QuramerDeepGreen
+import com.example.ui.theme.QuramerSoftGold
+
+@Composable
+fun LaunchIntroScreen(
+    userName: String,
+    onStartClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF041D15),
+                        QuramerDeepGreen,
+                        Color(0xFF0A3D2E)
+                    )
+                )
+            )
+            .padding(horizontal = 24.dp, vertical = 28.dp)
+            .navigationBarsPadding()
+            .testTag("launch_intro_screen")
+    ) {
+        // Subtle top salawat badge
+        Surface(
+            shape = CircleShape,
+            color = Color(0xFF34D399).copy(alpha = 0.16f),
+            border = BorderStroke(1.dp, Color(0xFF6EE7B7).copy(alpha = 0.45f)),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 24.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.salawat_banner_text),
+                style = MaterialTheme.typography.labelLarge,
+                color = Color(0xFFD1FAE5),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+        }
+
+        // Exact center of screen: clear prominent "created by Galileo"
+        Column(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth()
+                .widthIn(max = 460.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.app_name),
+                style = MaterialTheme.typography.titleLarge,
+                color = Color(0xFFA7F3D0),
+                fontWeight = FontWeight.Medium
+            )
+
+            Surface(
+                shape = MaterialTheme.shapes.extraLarge,
+                color = Color.White.copy(alpha = 0.08f),
+                border = BorderStroke(1.5.dp, QuramerSoftGold.copy(alpha = 0.75f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.created_by_galileo),
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontSize = 30.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 0.8.sp
+                            ),
+                            color = QuramerSoftGold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.testTag("intro_created_by_galileo")
+                        )
+                        if (userName.isNotBlank()) {
+                            Text(
+                                text = "أهلاً بك يا $userName",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White.copy(alpha = 0.9f),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            }
+
+            Text(
+                text = stringResource(R.string.app_slogan),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFFDCEAE3),
+                textAlign = TextAlign.Center
+            )
+        }
+
+        // Bottom CTA button: "يلا نبدأ"
+        Button(
+            onClick = onStartClick,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = QuramerSoftGold,
+                contentColor = Color(0xFF281C02)
+            ),
+            shape = MaterialTheme.shapes.large,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .widthIn(max = 520.dp)
+                .fillMaxWidth()
+                .padding(bottom = 12.dp)
+                .height(58.dp)
+                .minimumInteractiveComponentSize()
+                .testTag("intro_lets_start_button")
+        ) {
+            Text(
+                text = stringResource(R.string.intro_lets_start_button),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.width(10.dp))
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+}
 
 @Composable
 fun WelcomeScreen(
@@ -124,7 +262,7 @@ fun WelcomeScreen(
                     ) {
                         Box(modifier = Modifier.fillMaxSize()) {
                             Image(
-                                painter = painterResource(id = R.drawable.img_study_hero_1795442323794),
+                                painter = painterResource(id = R.drawable.img_quramer_hero_1795552750213),
                                 contentDescription = stringResource(R.string.cd_hero_banner),
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
@@ -137,8 +275,8 @@ fun WelcomeScreen(
                                     .background(
                                         Brush.verticalGradient(
                                             colors = listOf(
-                                                Color(0x330B1324),
-                                                Color(0xCC0B1324)
+                                                Color(0x4D062018),
+                                                Color(0xDB062018)
                                             )
                                         )
                                     )
@@ -174,6 +312,11 @@ fun WelcomeScreen(
                                     }
                                 }
 
+                                Text(
+                                    text = stringResource(R.string.app_slogan),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color(0xFFFDE68A)
+                                )
                                 Text(
                                     text = stringResource(R.string.welcome_quote),
                                     style = MaterialTheme.typography.bodyMedium,

@@ -31,9 +31,12 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.quran.ui.QuranUiEvent
+import com.example.quran.ui.QuranViewModel
 import com.example.ui.FocusLockScreen
 import com.example.ui.FocusUiEvent
 import com.example.ui.FocusViewModel
+import com.example.ui.LaunchIntroScreen
 import com.example.ui.WelcomeScreen
 import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.launch
@@ -45,7 +48,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             MyApplicationTheme {
                 val viewModel: FocusViewModel = viewModel()
+                val quranViewModel: QuranViewModel = viewModel()
                 val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+                val quranUiState by quranViewModel.uiState.collectAsStateWithLifecycle()
                 val snackbarHostState = remember { SnackbarHostState() }
                 val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -74,6 +79,14 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                val multiQuranFileLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenMultipleDocuments()
+                ) { uris ->
+                    if (uris.isNotEmpty()) {
+                        quranViewModel.onMultipleFilesSelected(uris)
+                    }
+                }
+
                 DisposableEffect(lifecycleOwner) {
                     val observer = LifecycleEventObserver { _, event ->
                         if (event == Lifecycle.Event.ON_RESUME) {
@@ -99,6 +112,19 @@ class MainActivity : ComponentActivity() {
                             FocusUiEvent.OpenAccessibilitySettings -> {
                                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                             }
+                            FocusUiEvent.OpenBatterySettings -> {
+                                runCatching {
+                                    startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                                }.onFailure {
+                                    runCatching {
+                                        startActivity(
+                                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                                data = Uri.fromParts("package", packageName, null)
+                                            }
+                                        )
+                                    }
+                                }
+                            }
                             FocusUiEvent.NavigateHome -> {
                                 startActivity(
                                     Intent(Intent.ACTION_MAIN)
@@ -118,58 +144,115 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                LaunchedEffect(Unit) {
+                    quranViewModel.events.collect { event ->
+                        when (event) {
+                            is QuranUiEvent.ShowMessage -> {
+                                Toast.makeText(this@MainActivity, event.message, Toast.LENGTH_LONG).show()
+                                launch {
+                                    snackbarHostState.currentSnackbarData?.dismiss()
+                                    snackbarHostState.showSnackbar(event.message)
+                                }
+                            }
+                            QuranUiEvent.LaunchMultiFilePicker -> {
+                                multiQuranFileLauncher.launch(
+                                    arrayOf(
+                                        "application/pdf",
+                                        "application/json",
+                                        "text/plain",
+                                        "audio/*",
+                                        "*/*"
+                                    )
+                                )
+                            }
+                            is QuranUiEvent.OpenPdfViewer -> {
+                                quranViewModel.openPdfViewer(event.file)
+                            }
+                            is QuranUiEvent.NotifyFocusLockRefresh -> {
+                                viewModel.refreshServiceAndTimer()
+                            }
+                        }
+                    }
+                }
+
+                val screenDestination = when {
+                    uiState.showLaunchIntroScreen -> "launch_intro"
+                    uiState.isWelcomeScreenVisible -> "welcome"
+                    else -> "main"
+                }
+
                 AnimatedContent(
-                    targetState = uiState.isWelcomeScreenVisible,
+                    targetState = screenDestination,
                     transitionSpec = { fadeIn() togetherWith fadeOut() },
                     label = "screen_transition"
-                ) { showWelcome ->
-                    if (showWelcome) {
-                        WelcomeScreen(
-                            nameDraft = uiState.nameDraft,
-                            nameError = uiState.nameError,
-                            isEditingExistingName = uiState.canNavigateBackFromWelcome,
-                            onNameDraftChange = viewModel::onNameDraftChange,
-                            onSubmitClick = viewModel::onSubmitNameClick,
-                            onCancelEdit = viewModel::onCancelEditName
-                        )
-                    } else {
-                        FocusLockScreen(
-                            uiState = uiState,
-                            snackbarHostState = snackbarHostState,
-                            needsNotificationPermission = !hasNotificationPermission,
-                            onRequestNotificationPermission = viewModel::requestNotificationPermission,
-                            onSelectTab = viewModel::selectTab,
-                            onEditNameClick = viewModel::onEditNameClick,
-                            onEnableServiceClick = viewModel::onEnableServiceClick,
-                            onHoursInputChange = viewModel::onHoursInputChange,
-                            onMinutesInputChange = viewModel::onMinutesInputChange,
-                            onAutoFullscreenChange = viewModel::onAutoFullscreenTimerChange,
-                            onOpenFullScreenTimer = viewModel::openFullScreenTimer,
-                            onCloseFullScreenTimer = viewModel::closeFullScreenTimer,
-                            onSearchQueryChange = viewModel::onSearchQueryChange,
-                            onToggleApp = viewModel::toggleApp,
-                            onSelectAllFiltered = viewModel::selectAllFiltered,
-                            onClearAllFiltered = viewModel::clearAllFiltered,
-                            onConfirmAllowedApps = viewModel::confirmAllowedAppsSelection,
-                            onStartSessionClick = viewModel::onStartSessionClick,
-                            onDismissStartConfirm = viewModel::dismissStartConfirmDialog,
-                            onConfirmStartSession = viewModel::confirmStartSession,
-                            onRequestCancelSession = viewModel::requestCancelSession,
-                            onDismissCancelSession = viewModel::dismissCancelSession,
-                            onConfirmCancelSession = viewModel::confirmCancelSession,
-                            onNewTaskInputChange = viewModel::onNewTaskInputChange,
-                            onAddTaskClick = viewModel::onAddTaskClick,
-                            onToggleTask = viewModel::onToggleTask,
-                            onDeleteTask = viewModel::onDeleteTask,
-                            onDismissAchievement = viewModel::dismissAchievementDialog,
-                            onSelectBuiltInSound = viewModel::selectBuiltInSound,
-                            onSelectUploadedTrack = viewModel::selectUploadedTrack,
-                            onUploadAudioClick = viewModel::onRequestUploadAudio,
-                            onDeleteUploadedTrack = viewModel::deleteUploadedTrack,
-                            onAudioVolumeChange = viewModel::onAudioVolumeChange,
-                            onAudioLoopToggle = viewModel::onAudioLoopToggle,
-                            onToggleAudioPlayback = viewModel::onToggleAudioPlayback
-                        )
+                ) { destination ->
+                    when (destination) {
+                        "launch_intro" -> {
+                            LaunchIntroScreen(
+                                userName = uiState.userName,
+                                onStartClick = viewModel::onLaunchIntroStartClick
+                            )
+                        }
+                        "welcome" -> {
+                            WelcomeScreen(
+                                nameDraft = uiState.nameDraft,
+                                nameError = uiState.nameError,
+                                isEditingExistingName = uiState.canNavigateBackFromWelcome,
+                                onNameDraftChange = viewModel::onNameDraftChange,
+                                onSubmitClick = viewModel::onSubmitNameClick,
+                                onCancelEdit = viewModel::onCancelEditName
+                            )
+                        }
+                        else -> {
+                            FocusLockScreen(
+                                uiState = uiState,
+                                quranUiState = quranUiState,
+                                quranViewModel = quranViewModel,
+                                snackbarHostState = snackbarHostState,
+                                needsNotificationPermission = !hasNotificationPermission,
+                                onRequestNotificationPermission = viewModel::requestNotificationPermission,
+                                onSelectTab = viewModel::selectTab,
+                                onSelectStudySubSection = viewModel::selectStudySubSection,
+                                onSelectTasksSubSection = viewModel::selectTasksSubSection,
+                                onEditNameClick = viewModel::onEditNameClick,
+                                onEnableServiceClick = viewModel::onEnableServiceClick,
+                                onStudyAppLockChange = viewModel::onStudyAppLockEnabledChange,
+                                onOpenBatterySettingsClick = viewModel::onOpenBatterySettingsClick,
+                                onDismissAccessibilityOptional = viewModel::dismissAccessibilityOptionalDialog,
+                                onStartWithoutAppLock = viewModel::startSessionWithoutAppLock,
+                                onOpenAccessibilityFromDialog = viewModel::openAccessibilitySettingsFromDialog,
+                                onHoursInputChange = viewModel::onHoursInputChange,
+                                onMinutesInputChange = viewModel::onMinutesInputChange,
+                                onSelectTimerMode = viewModel::selectTimerMode,
+                                onOpenWithTimerMode = viewModel::openFocusWithTimerMode,
+                                onAutoFullscreenChange = viewModel::onAutoFullscreenTimerChange,
+                                onOpenFullScreenTimer = viewModel::openFullScreenTimer,
+                                onCloseFullScreenTimer = viewModel::closeFullScreenTimer,
+                                onSearchQueryChange = viewModel::onSearchQueryChange,
+                                onToggleApp = viewModel::toggleApp,
+                                onSelectAllFiltered = viewModel::selectAllFiltered,
+                                onClearAllFiltered = viewModel::clearAllFiltered,
+                                onConfirmAllowedApps = viewModel::confirmAllowedAppsSelection,
+                                onStartSessionClick = viewModel::onStartSessionClick,
+                                onDismissStartConfirm = viewModel::dismissStartConfirmDialog,
+                                onConfirmStartSession = viewModel::confirmStartSession,
+                                onRequestCancelSession = viewModel::requestCancelSession,
+                                onDismissCancelSession = viewModel::dismissCancelSession,
+                                onConfirmCancelSession = viewModel::confirmCancelSession,
+                                onNewTaskInputChange = viewModel::onNewTaskInputChange,
+                                onAddTaskClick = viewModel::onAddTaskClick,
+                                onToggleTask = viewModel::onToggleTask,
+                                onDeleteTask = viewModel::onDeleteTask,
+                                onDismissAchievement = viewModel::dismissAchievementDialog,
+                                onSelectBuiltInSound = viewModel::selectBuiltInSound,
+                                onSelectUploadedTrack = viewModel::selectUploadedTrack,
+                                onUploadAudioClick = viewModel::onRequestUploadAudio,
+                                onDeleteUploadedTrack = viewModel::deleteUploadedTrack,
+                                onAudioVolumeChange = viewModel::onAudioVolumeChange,
+                                onAudioLoopToggle = viewModel::onAudioLoopToggle,
+                                onToggleAudioPlayback = viewModel::onToggleAudioPlayback
+                            )
+                        }
                     }
                 }
             }

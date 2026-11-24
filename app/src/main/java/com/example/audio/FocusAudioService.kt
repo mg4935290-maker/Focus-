@@ -13,6 +13,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.net.toUri
 import com.example.MainActivity
 import com.example.R
 import com.example.data.BuiltInSound
@@ -64,7 +65,7 @@ class FocusAudioService : Service() {
                     stopPlaybackAndSelf()
                 } else {
                     startForegroundWithNotification(title)
-                    playUri(Uri.parse(uriStr), volume, loop, title)
+                    playUri(uriStr.toUri(), volume, loop, title)
                 }
             }
             ACTION_UPDATE_CONTROLS -> {
@@ -284,15 +285,13 @@ class FocusAudioService : Service() {
                 putExtra(EXTRA_VOLUME, volume)
                 putExtra(EXTRA_LOOP, loop)
             }
-            context.startService(intent)
+            runCatching { context.startService(intent) }
         }
 
         fun stop(context: Context) {
             if (!_playbackState.value.isPlaying) return
-            val intent = Intent(context, FocusAudioService::class.java).apply {
-                action = ACTION_STOP
-            }
-            context.startService(intent)
+            _playbackState.value = AudioPlaybackState(isPlaying = false, activeTitle = "")
+            runCatching { context.stopService(Intent(context, FocusAudioService::class.java)) }
         }
     }
 }

@@ -3,6 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/focus_lock_icon_1795441828681"
+        android:drawable="@drawable/quramer_icon_1795552749218"
         android:gravity="center" />
 </layer-list>

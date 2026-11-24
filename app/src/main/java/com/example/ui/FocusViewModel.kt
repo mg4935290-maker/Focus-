@@ -27,19 +27,39 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 enum class MainTab {
+    HOME,
     FOCUS,
-    AUDIO,
+    QURAN,
     TASKS,
-    FARM
+    STATS
+}
+
+enum class StudySubSection {
+    FOCUS_LOCK,
+    STUDY_AUDIO
+}
+
+enum class TasksSubSection {
+    DAILY_TASKS,
+    TREE_FARM
+}
+
+enum class SessionTimerMode {
+    TIMER,
+    STOPWATCH
 }
 
 data class FocusUiState(
     val userName: String = "",
     val nameDraft: String = "",
     val nameError: Boolean = false,
+    val showLaunchIntroScreen: Boolean = true,
     val isWelcomeScreenVisible: Boolean = true,
     val canNavigateBackFromWelcome: Boolean = false,
-    val selectedTab: MainTab = MainTab.FOCUS,
+    val selectedTab: MainTab = MainTab.HOME,
+    val studySubSection: StudySubSection = StudySubSection.FOCUS_LOCK,
+    val tasksSubSection: TasksSubSection = TasksSubSection.DAILY_TASKS,
+    val selectedTimerMode: SessionTimerMode = SessionTimerMode.TIMER,
     val isLoadingApps: Boolean = true,
     val installedApps: List<InstalledApp> = emptyList(),
     val allowedPackages: Set<String> = emptySet(),
@@ -48,9 +68,14 @@ data class FocusUiState(
     val hoursInput: String = "1",
     val minutesInput: String = "0",
     val isServiceEnabled: Boolean = false,
+    val studyAppLockEnabled: Boolean = true,
+    val showAccessibilityOptionalDialog: Boolean = false,
+    val sessionStartMs: Long = 0L,
     val sessionEndMs: Long = 0L,
     val sessionDurationMs: Long = 0L,
     val remainingMs: Long = 0L,
+    val isStopwatchActive: Boolean = false,
+    val stopwatchElapsedMs: Long = 0L,
     val showStartConfirmDialog: Boolean = false,
     val showCancelSessionDialog: Boolean = false,
     val isFullScreenTimerVisible: Boolean = false,
@@ -71,7 +96,7 @@ data class FocusUiState(
     val playingAudioTitle: String = ""
 ) {
     val isSessionActive: Boolean
-        get() = remainingMs > 0L
+        get() = remainingMs > 0L || isStopwatchActive
 
     val completedTasksCount: Int
         get() = dailyTasks.count { it.isCompleted }
@@ -106,6 +131,7 @@ data class FocusUiState(
 sealed interface FocusUiEvent {
     data class ShowMessage(val messageResId: Int) : FocusUiEvent
     data object OpenAccessibilitySettings : FocusUiEvent
+    data object OpenBatterySettings : FocusUiEvent
     data object NavigateHome : FocusUiEvent
     data object LaunchAudioFilePicker : FocusUiEvent
     data object RequestNotificationPermission : FocusUiEvent
@@ -155,7 +181,10 @@ class FocusViewModel @JvmOverloads constructor(
         val volume = repository.getAudioVolume()
         val loop = repository.isAudioLoopEnabled()
         val autoFullscreen = repository.isAutoFullscreenTimerEnabled()
-        val remaining = (snapshot.sessionEndMs - now).coerceAtLeast(0L)
+        val appLockEnabled = repository.isStudyAppLockEnabled()
+        val stopwatchActive = snapshot.isStopwatch && snapshot.sessionStartMs > 0L
+        val remaining = if (stopwatchActive) 0L else (snapshot.sessionEndMs - now).coerceAtLeast(0L)
+        val elapsed = if (stopwatchActive) (now - snapshot.sessionStartMs).coerceAtLeast(0L) else 0L
 
         _uiState.update { state ->
             state.copy(
@@ -165,9 +194,14 @@ class FocusViewModel @JvmOverloads constructor(
                 canNavigateBackFromWelcome = false,
                 allowedPackages = savedAllowed,
                 isServiceEnabled = serviceEnabled,
+                studyAppLockEnabled = appLockEnabled,
+                selectedTimerMode = if (stopwatchActive) SessionTimerMode.STOPWATCH else state.selectedTimerMode,
+                sessionStartMs = snapshot.sessionStartMs,
                 sessionEndMs = snapshot.sessionEndMs,
                 sessionDurationMs = snapshot.sessionDurationMs,
                 remainingMs = remaining,
+                isStopwatchActive = stopwatchActive,
+                stopwatchElapsedMs = elapsed,
                 dailyStudyMs = snapshot.dailyStudyMs,
                 totalStudyMs = snapshot.totalStudyMs,
                 unplantedStudyMs = snapshot.unplantedStudyMs,
@@ -186,8 +220,8 @@ class FocusViewModel @JvmOverloads constructor(
 
         checkHoursAchievement(snapshot.dailyStudyMs, now)
 
-        if (remaining > 0L) {
-            startTicker(snapshot.sessionEndMs)
+        if (remaining > 0L || stopwatchActive) {
+            startTicker()
         } else {
             tickerJob?.cancel()
         }
@@ -208,35 +242,68 @@ class FocusViewModel @JvmOverloads constructor(
         val snapshot = repository.syncStudyProgress(now)
         val serviceEnabled = repository.isBlockerServiceEnabled()
         val tasks = repository.loadDailyTasks()
-        val remaining = (snapshot.sessionEndMs - now).coerceAtLeast(0L)
+        val stopwatchActive = snapshot.isStopwatch && snapshot.sessionStartMs > 0L
+        val remaining = if (stopwatchActive) 0L else (snapshot.sessionEndMs - now).coerceAtLeast(0L)
+        val elapsed = if (stopwatchActive) (now - snapshot.sessionStartMs).coerceAtLeast(0L) else 0L
+        val activeNow = remaining > 0L || stopwatchActive
 
         _uiState.update { state ->
             state.copy(
                 isServiceEnabled = serviceEnabled,
+                sessionStartMs = snapshot.sessionStartMs,
                 sessionEndMs = snapshot.sessionEndMs,
                 sessionDurationMs = snapshot.sessionDurationMs,
                 remainingMs = remaining,
+                isStopwatchActive = stopwatchActive,
+                stopwatchElapsedMs = elapsed,
                 dailyStudyMs = snapshot.dailyStudyMs,
                 totalStudyMs = snapshot.totalStudyMs,
                 unplantedStudyMs = snapshot.unplantedStudyMs,
                 plantedTrees = snapshot.trees,
                 dailyTasks = tasks,
-                isFullScreenTimerVisible = if (remaining <= 0L) false else state.isFullScreenTimerVisible
+                isFullScreenTimerVisible = if (!activeNow) false else state.isFullScreenTimerVisible
             )
         }
 
         checkHoursAchievement(snapshot.dailyStudyMs, now)
 
-        if (remaining > 0L) {
-            startTicker(snapshot.sessionEndMs)
+        if (activeNow) {
+            startTicker()
         } else {
             tickerJob?.cancel()
             FocusAudioService.stop(getApplication())
         }
     }
 
+    fun onLaunchIntroStartClick() {
+        _uiState.update { it.copy(showLaunchIntroScreen = false) }
+    }
+
+    fun selectTimerMode(mode: SessionTimerMode) {
+        if (_uiState.value.isSessionActive) return
+        _uiState.update { it.copy(selectedTimerMode = mode) }
+    }
+
+    fun openFocusWithTimerMode(mode: SessionTimerMode) {
+        _uiState.update { state ->
+            state.copy(
+                selectedTab = MainTab.FOCUS,
+                studySubSection = StudySubSection.FOCUS_LOCK,
+                selectedTimerMode = if (state.isSessionActive) state.selectedTimerMode else mode
+            )
+        }
+    }
+
     fun selectTab(tab: MainTab) {
         _uiState.update { it.copy(selectedTab = tab) }
+    }
+
+    fun selectStudySubSection(section: StudySubSection) {
+        _uiState.update { it.copy(selectedTab = MainTab.FOCUS, studySubSection = section) }
+    }
+
+    fun selectTasksSubSection(section: TasksSubSection) {
+        _uiState.update { it.copy(selectedTab = MainTab.TASKS, tasksSubSection = section) }
     }
 
     fun onNameDraftChange(name: String) {
@@ -349,12 +416,22 @@ class FocusViewModel @JvmOverloads constructor(
         _uiState.update { it.copy(isFullScreenTimerVisible = false) }
     }
 
+    fun onStudyAppLockEnabledChange(enabled: Boolean) {
+        repository.saveStudyAppLockEnabled(enabled)
+        _uiState.update { it.copy(studyAppLockEnabled = enabled) }
+    }
+
+    fun onOpenBatterySettingsClick() {
+        _events.tryEmit(FocusUiEvent.OpenBatterySettings)
+    }
+
     fun onEnableServiceClick() {
         _events.tryEmit(FocusUiEvent.OpenAccessibilitySettings)
     }
 
     fun onStartSessionClick() {
         if (_uiState.value.isSessionActive) return
+        val isStopwatch = _uiState.value.selectedTimerMode == SessionTimerMode.STOPWATCH
         val hours = _uiState.value.hoursInput.toLongOrNull() ?: 0L
         val minutes = _uiState.value.minutesInput.toLongOrNull() ?: 0L
         val totalMinutes = hours * 60L + minutes
@@ -363,14 +440,14 @@ class FocusViewModel @JvmOverloads constructor(
         _uiState.update { it.copy(isServiceEnabled = serviceEnabled) }
 
         when {
-            totalMinutes <= 0L -> {
+            !isStopwatch && totalMinutes <= 0L -> {
                 _events.tryEmit(FocusUiEvent.ShowMessage(R.string.msg_invalid_duration))
             }
-            !serviceEnabled -> {
-                _events.tryEmit(FocusUiEvent.ShowMessage(R.string.msg_enable_service_first))
-                _events.tryEmit(FocusUiEvent.OpenAccessibilitySettings)
+            _uiState.value.studyAppLockEnabled && !serviceEnabled -> {
+                // Ask gracefully instead of forcing Android Settings every time
+                _uiState.update { it.copy(showAccessibilityOptionalDialog = true) }
             }
-            !_uiState.value.isAppsSelectionConfirmed -> {
+            _uiState.value.studyAppLockEnabled && !_uiState.value.isAppsSelectionConfirmed -> {
                 _uiState.update { it.copy(showStartConfirmDialog = true) }
             }
             else -> {
@@ -379,43 +456,83 @@ class FocusViewModel @JvmOverloads constructor(
         }
     }
 
+    fun dismissAccessibilityOptionalDialog() {
+        _uiState.update { it.copy(showAccessibilityOptionalDialog = false) }
+    }
+
+    fun startSessionWithoutAppLock() {
+        _uiState.update { it.copy(showAccessibilityOptionalDialog = false) }
+        confirmStartSession(navigateHome = false)
+    }
+
+    fun openAccessibilitySettingsFromDialog() {
+        _uiState.update { it.copy(showAccessibilityOptionalDialog = false) }
+        _events.tryEmit(FocusUiEvent.OpenAccessibilitySettings)
+    }
+
     fun dismissStartConfirmDialog() {
         _uiState.update { it.copy(showStartConfirmDialog = false) }
     }
 
-    fun confirmStartSession() {
+    fun confirmStartSession(navigateHome: Boolean = true) {
         val state = _uiState.value
         if (state.isSessionActive) return
-        val hours = state.hoursInput.toLongOrNull() ?: 0L
-        val minutes = state.minutesInput.toLongOrNull() ?: 0L
-        val totalMinutes = hours * 60L + minutes
-        if (totalMinutes <= 0L) {
-            _uiState.update { it.copy(showStartConfirmDialog = false) }
-            _events.tryEmit(FocusUiEvent.ShowMessage(R.string.msg_invalid_duration))
-            return
+        val isStopwatch = state.selectedTimerMode == SessionTimerMode.STOPWATCH
+        val now = System.currentTimeMillis()
+        val openFullScreen = state.autoOpenFullscreenTimer
+
+        if (isStopwatch) {
+            val startedAt = repository.startStopwatchSession(
+                allowedPackages = state.allowedPackages,
+                nowMs = now
+            )
+            _uiState.update {
+                it.copy(
+                    showStartConfirmDialog = false,
+                    isAppsSelectionConfirmed = true,
+                    sessionStartMs = startedAt,
+                    sessionEndMs = Long.MAX_VALUE,
+                    sessionDurationMs = 0L,
+                    remainingMs = 0L,
+                    isStopwatchActive = true,
+                    stopwatchElapsedMs = 0L,
+                    isFullScreenTimerVisible = openFullScreen
+                )
+            }
+        } else {
+            val hours = state.hoursInput.toLongOrNull() ?: 0L
+            val minutes = state.minutesInput.toLongOrNull() ?: 0L
+            val totalMinutes = hours * 60L + minutes
+            if (totalMinutes <= 0L) {
+                _uiState.update { it.copy(showStartConfirmDialog = false) }
+                _events.tryEmit(FocusUiEvent.ShowMessage(R.string.msg_invalid_duration))
+                return
+            }
+
+            val (endMs, durationMs) = repository.startSession(
+                allowedPackages = state.allowedPackages,
+                durationMinutes = totalMinutes,
+                nowMs = now
+            )
+            _uiState.update {
+                it.copy(
+                    showStartConfirmDialog = false,
+                    isAppsSelectionConfirmed = true,
+                    sessionStartMs = now,
+                    sessionEndMs = endMs,
+                    sessionDurationMs = durationMs,
+                    remainingMs = (endMs - now).coerceAtLeast(0L),
+                    isStopwatchActive = false,
+                    stopwatchElapsedMs = 0L,
+                    isFullScreenTimerVisible = openFullScreen
+                )
+            }
         }
 
-        val now = System.currentTimeMillis()
-        val (endMs, durationMs) = repository.startSession(
-            allowedPackages = state.allowedPackages,
-            durationMinutes = totalMinutes,
-            nowMs = now
-        )
-        val openFullScreen = state.autoOpenFullscreenTimer
-        _uiState.update {
-            it.copy(
-                showStartConfirmDialog = false,
-                isAppsSelectionConfirmed = true,
-                sessionEndMs = endMs,
-                sessionDurationMs = durationMs,
-                remainingMs = (endMs - now).coerceAtLeast(0L),
-                isFullScreenTimerVisible = openFullScreen
-            )
-        }
-        startTicker(endMs)
+        startTicker()
         SalawatReminderScheduler.scheduleIfNeeded(getApplication())
         _events.tryEmit(FocusUiEvent.ShowMessage(R.string.msg_session_started))
-        if (!openFullScreen) {
+        if (!openFullScreen && navigateHome && state.studyAppLockEnabled && state.isServiceEnabled) {
             _events.tryEmit(FocusUiEvent.NavigateHome)
         }
     }
@@ -440,9 +557,12 @@ class FocusViewModel @JvmOverloads constructor(
             it.copy(
                 showCancelSessionDialog = false,
                 isFullScreenTimerVisible = false,
+                sessionStartMs = 0L,
                 sessionEndMs = 0L,
                 sessionDurationMs = 0L,
                 remainingMs = 0L,
+                isStopwatchActive = false,
+                stopwatchElapsedMs = 0L,
                 dailyStudyMs = snapshot.dailyStudyMs,
                 totalStudyMs = snapshot.totalStudyMs,
                 unplantedStudyMs = snapshot.unplantedStudyMs,
@@ -623,30 +743,36 @@ class FocusViewModel @JvmOverloads constructor(
         }
     }
 
-    private fun startTicker(endMs: Long) {
+    private fun startTicker() {
         tickerJob?.cancel()
         tickerJob = viewModelScope.launch {
             while (isActive) {
                 val now = System.currentTimeMillis()
                 val snapshot = repository.syncStudyProgress(now)
-                val remaining = (endMs - now).coerceAtLeast(0L)
+                val stopwatchActive = snapshot.isStopwatch && snapshot.sessionStartMs > 0L
+                val remaining = if (stopwatchActive) 0L else (snapshot.sessionEndMs - now).coerceAtLeast(0L)
+                val elapsed = if (stopwatchActive) (now - snapshot.sessionStartMs).coerceAtLeast(0L) else 0L
+                val activeNow = remaining > 0L || stopwatchActive
 
                 _uiState.update { state ->
                     state.copy(
+                        sessionStartMs = snapshot.sessionStartMs,
                         remainingMs = remaining,
+                        isStopwatchActive = stopwatchActive,
+                        stopwatchElapsedMs = elapsed,
                         dailyStudyMs = snapshot.dailyStudyMs,
                         totalStudyMs = snapshot.totalStudyMs,
                         unplantedStudyMs = snapshot.unplantedStudyMs,
                         plantedTrees = snapshot.trees,
                         sessionEndMs = snapshot.sessionEndMs,
                         sessionDurationMs = snapshot.sessionDurationMs,
-                        isFullScreenTimerVisible = if (remaining <= 0L) false else state.isFullScreenTimerVisible
+                        isFullScreenTimerVisible = if (!activeNow) false else state.isFullScreenTimerVisible
                     )
                 }
 
                 checkHoursAchievement(snapshot.dailyStudyMs, now)
 
-                if (remaining <= 0L) {
+                if (!activeNow) {
                     FocusAudioService.stop(getApplication())
                     break
                 }
