@@ -44,7 +44,7 @@
             android:excludeFromRecents="true"
             android:exported="false"
             android:launchMode="singleInstance"
-            android:taskAffinity="com.example.blocked"
+            android:taskAffinity="${applicationId}.blocked"
             android:theme="@style/Theme.MyApplication" />
 
         <service
