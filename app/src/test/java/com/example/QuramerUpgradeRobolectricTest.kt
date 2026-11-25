@@ -495,4 +495,99 @@ class QuramerUpgradeRobolectricTest {
         assertFalse(vm.uiState.value.isStopwatchActive)
         assertFalse(vm.uiState.value.isSessionActive)
     }
+
+    @Test
+    fun `main tabs exclude standalone quran tab and focus audio hosts quran`() {
+        assertEquals(
+            listOf(
+                com.example.ui.MainTab.HOME,
+                com.example.ui.MainTab.FOCUS,
+                com.example.ui.MainTab.TASKS,
+                com.example.ui.MainTab.STATS
+            ),
+            com.example.ui.MainTab.entries
+        )
+    }
+
+    @Test
+    fun `monthly reset archives previous month and resets current month statistics`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val repo = FocusRepository(context)
+        repo.cancelSession(System.currentTimeMillis())
+
+        val cal = java.util.Calendar.getInstance()
+        cal.set(2026, java.util.Calendar.NOVEMBER, 25, 10, 0, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        val novTime = cal.timeInMillis
+
+        // Study 90 minutes in November 2026 (plants 1 tree)
+        repo.startSession(emptySet(), durationMinutes = 90L, nowMs = novTime)
+        val afterNov = repo.syncStudyProgress(novTime + 90L * 60_000L)
+        assertEquals("2026-11", afterNov.currentMonthKey)
+        assertEquals(90L * 60_000L, afterNov.monthlyStudyMs)
+        assertEquals(1, afterNov.monthlyTreesCount)
+        assertTrue(afterNov.hasUnseenSessionFinished)
+        repo.dismissSessionFinishedCelebration()
+
+        // Advance into December 2026 -> November is archived, December starts at 0
+        cal.set(2026, java.util.Calendar.DECEMBER, 2, 9, 0, 0)
+        val decTime = cal.timeInMillis
+        val inDec = repo.syncStudyProgress(decTime)
+        assertEquals("2026-12", inDec.currentMonthKey)
+        assertEquals(0L, inDec.monthlyStudyMs)
+        assertEquals(0, inDec.monthlyTreesCount)
+
+        val novArchived = inDec.monthlyArchive.firstOrNull { it.monthKey == "2026-11" }
+        assertNotNull(novArchived)
+        assertEquals(90L * 60_000L, novArchived!!.studyMs)
+        assertEquals(1, novArchived.treesCount)
+        assertEquals(1, novArchived.activeDays)
+        assertTrue(novArchived.label.contains("نوفمبر"))
+        assertTrue(inDec.weeklyArchive.isNotEmpty())
+    }
+
+    @Test
+    fun `completing a session triggers and dismisses session finished celebration in viewmodel`() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val repo = FocusRepository(app)
+        val now = System.currentTimeMillis()
+        repo.cancelSession(now)
+
+        // Start a 10-minute session in the past that just completed
+        repo.startSession(emptySet(), durationMinutes = 10L, nowMs = now - 11L * 60_000L)
+        val vm = FocusViewModel(app, repo)
+
+        assertTrue(vm.uiState.value.showSessionFinishedScreen)
+        assertEquals(10L * 60_000L, vm.uiState.value.finishedSessionDurationMs)
+
+        vm.dismissSessionFinishedScreen()
+        assertFalse(vm.uiState.value.showSessionFinishedScreen)
+        assertFalse(repo.getStudyProgressSnapshot(now).hasUnseenSessionFinished)
+    }
+
+    @Test
+    fun `daily date formatter produces Arabic weekday date and updates across days`() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val repo = FocusRepository(app)
+
+        val cal = java.util.Calendar.getInstance()
+        cal.set(2026, java.util.Calendar.NOVEMBER, 25, 14, 0, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        val nov25Ms = cal.timeInMillis
+
+        val snap25 = repo.syncStudyProgress(nov25Ms)
+        assertEquals("2026-11-25", snap25.currentDateKey)
+        assertEquals("الأربعاء، 25 نوفمبر 2026", snap25.currentDateFormatted)
+        assertEquals("الأربعاء، 25 نوفمبر 2026", FocusRepository.formatFullDateArabicFromKey("2026-11-25"))
+
+        cal.set(2026, java.util.Calendar.NOVEMBER, 26, 8, 30, 0)
+        val nov26Ms = cal.timeInMillis
+        val snap26 = repo.syncStudyProgress(nov26Ms)
+        assertEquals("2026-11-26", snap26.currentDateKey)
+        assertEquals("الخميس، 26 نوفمبر 2026", snap26.currentDateFormatted)
+
+        val vm = FocusViewModel(app, repo)
+        assertTrue(vm.uiState.value.currentDateKey.isNotBlank())
+        assertTrue(vm.uiState.value.currentDateFormatted.isNotBlank())
+    }
 }

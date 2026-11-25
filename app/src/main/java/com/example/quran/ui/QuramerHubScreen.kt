@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,15 +19,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Park
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Button
@@ -66,24 +62,14 @@ import com.example.ui.theme.StudySuccessGreen
 @Composable
 fun QuramerHubScreen(
     focusState: FocusUiState,
-    quranState: QuranUiState,
     onEditNameClick: () -> Unit,
     onOpenTimerMode: () -> Unit,
     onOpenStopwatchMode: () -> Unit,
-    onOpenSmartTimer: () -> Unit,
-    onResumeLastReading: () -> Unit,
-    onOpenLibrary: () -> Unit,
+    onOpenFocusAudio: () -> Unit,
     onOpenTreeFarm: () -> Unit,
     onOpenStats: () -> Unit,
-    onAcceptHubQuranSuggestion: () -> Unit,
-    onDismissHubQuranSuggestion: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val lastSurah = quranState.surahs.firstOrNull { it.number == quranState.profile.lastViewedSurah }
-    val totalReadMs = quranState.surahs.sumOf { it.totalReadMs }
-    val totalListenMs = quranState.surahs.sumOf { it.totalListenedMs }
-    val completedSurahsCount = quranState.surahs.count { it.isCompleted }
-
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
@@ -199,7 +185,7 @@ fun QuramerHubScreen(
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Button(
-                                onClick = onOpenSmartTimer,
+                                onClick = onOpenTimerMode,
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = QuramerSoftGold,
                                     contentColor = Color(0xFF281C02)
@@ -208,39 +194,39 @@ fun QuramerHubScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .minimumInteractiveComponentSize()
-                                    .testTag("hub_smart_timer_cta")
+                                    .testTag("hub_start_focus_cta")
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.AutoAwesome,
+                                    imageVector = Icons.Filled.Timer,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(
-                                    text = stringResource(R.string.smart_select_button),
+                                    text = "بدء التركيز",
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1
                                 )
                             }
 
                             OutlinedButton(
-                                onClick = onResumeLastReading,
+                                onClick = onOpenFocusAudio,
                                 border = BorderStroke(1.dp, Color(0xFFA7F3D0)),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFA7F3D0)),
                                 shape = MaterialTheme.shapes.small,
                                 modifier = Modifier
                                     .weight(1f)
                                     .minimumInteractiveComponentSize()
-                                    .testTag("hub_resume_quran_cta")
+                                    .testTag("hub_open_audio_quran_cta")
                             ) {
                                 Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                                    imageVector = Icons.Filled.LibraryMusic,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(
-                                    text = lastSurah?.nameArabic?.let { "متابعة $it" } ?: "المصحف",
+                                    text = stringResource(R.string.tab_audio),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -251,8 +237,8 @@ fun QuramerHubScreen(
             }
         }
 
-        // Active Session Banner (Focus Lock or Quran Session)
-        if (focusState.isSessionActive || quranState.activeSession != null) {
+        // Active Focus Session Banner (Timer or Stopwatch)
+        if (focusState.isSessionActive) {
             item(key = "active_session_banner") {
                 Card(
                     shape = MaterialTheme.shapes.medium,
@@ -269,18 +255,18 @@ fun QuramerHubScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
-                                text = when {
-                                    quranState.activeSession != null -> "جلسة قرآن نشطة الآن"
-                                    focusState.isStopwatchActive -> stringResource(R.string.stopwatch_active_title)
-                                    else -> stringResource(R.string.session_active_title)
+                                text = if (focusState.isStopwatchActive) {
+                                    stringResource(R.string.stopwatch_active_title)
+                                } else {
+                                    stringResource(R.string.session_active_title)
                                 },
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
-                            val ms = when {
-                                quranState.activeSession != null -> quranState.activeSession.remainingMs
-                                focusState.isStopwatchActive -> focusState.stopwatchElapsedMs
-                                else -> focusState.remainingMs
+                            val ms = if (focusState.isStopwatchActive) {
+                                focusState.stopwatchElapsedMs
+                            } else {
+                                focusState.remainingMs
                             }
                             Text(
                                 text = formatTimerClock(ms),
@@ -290,7 +276,7 @@ fun QuramerHubScreen(
                             )
                         }
                         Button(
-                            onClick = if (quranState.activeSession != null) onOpenSmartTimer else onOpenTimerMode,
+                            onClick = onOpenTimerMode,
                             shape = MaterialTheme.shapes.small
                         ) {
                             Text("فتح الجلسة")
@@ -300,97 +286,7 @@ fun QuramerHubScreen(
             }
         }
 
-        // Optional Quran Suggestion Card (never auto-plays without user saying Yes)
-        if (!quranState.hubSuggestionDismissed &&
-            quranState.activeSession == null &&
-            !quranState.playbackState.isPlaying
-        ) {
-            item(key = "hub_quran_suggestion") {
-                val suggestedTrack = quranState.audioTracks.firstOrNull()
-                val suggestedSurah = suggestedTrack?.surahNumber?.let { num ->
-                    quranState.surahs.firstOrNull { it.number == num }
-                } ?: quranState.surahs.firstOrNull { !it.isCompleted }
-                Card(
-                    shape = MaterialTheme.shapes.medium,
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f)
-                    ),
-                    border = BorderStroke(1.dp, QuramerSoftGold.copy(alpha = 0.65f)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("hub_quran_suggestion_card")
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.AutoAwesome,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = "اقتراح قرآني لك الآن (اختياري)",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                        Text(
-                            text = if (suggestedTrack != null) {
-                                val reciter = suggestedTrack.reciterName.ifBlank { "من مكتبتك الصوتية" }
-                                val title = suggestedSurah?.nameArabic ?: suggestedTrack.displayName
-                                "تحب نشغّل تلاوة «$title» ($reciter) ولا تخليها بعدين؟"
-                            } else {
-                                val title = suggestedSurah?.nameArabic ?: "سورة الكهف"
-                                "نقترح لك ورداً لطيفاً من القرآن الكريم («$title» مثلاً). تحب تبدأ الآن؟"
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Button(
-                                onClick = onAcceptHubQuranSuggestion,
-                                shape = MaterialTheme.shapes.small,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .minimumInteractiveComponentSize()
-                                    .testTag("hub_suggestion_yes")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.PlayArrow,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(if (suggestedTrack != null) "أه، شغّل الآن" else "أه، افتح الاقتراح")
-                            }
-                            OutlinedButton(
-                                onClick = onDismissHubQuranSuggestion,
-                                shape = MaterialTheme.shapes.small,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .minimumInteractiveComponentSize()
-                                    .testTag("hub_suggestion_no")
-                            ) {
-                                Text("لا، لاحقاً")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Two Main Modes: Timer & Stopwatch (no Study Mode / Quran Mode)
+        // Two Main Modes: Timer & Stopwatch
         item(key = "main_modes_grid") {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -416,6 +312,55 @@ fun QuramerHubScreen(
                         .weight(1f)
                         .testTag("hub_stopwatch_mode_card")
                 )
+            }
+        }
+
+        // Focus Audio & Quran Quick Card
+        item(key = "focus_audio_quran_card") {
+            Card(
+                shape = MaterialTheme.shapes.medium,
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.48f)
+                ),
+                border = BorderStroke(1.dp, QuramerSoftGold.copy(alpha = 0.55f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenFocusAudio)
+                    .testTag("hub_focus_audio_card")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = QuramerSoftGold.copy(alpha = 0.2f),
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Filled.LibraryMusic,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "الأصوات والقرآن أثناء الجلسة",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "شغّل أصوات التركيز أو تلاوات القراء والمصحف مباشرة داخل قسم المذاكرة",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         }
 
@@ -507,7 +452,7 @@ fun QuramerHubScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "كل ساعة مذاكرة أو قرآن = شجرة",
+                            text = "كل ساعة مذاكرة = شجرة حقيقية",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -518,7 +463,7 @@ fun QuramerHubScreen(
             }
         }
 
-        // Combined Summary Statistics Card
+        // Study-Only Summary Statistics Card
         item(key = "hub_summary_stats") {
             Card(
                 shape = MaterialTheme.shapes.medium,
@@ -550,13 +495,13 @@ fun QuramerHubScreen(
                                 tint = MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                text = "ملخص الإنجاز والقرآن",
+                                text = "ملخص إحصائيات المذاكرة",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
                         }
                         Text(
-                            text = "عرض التفاصيل ←",
+                            text = "الأرشيف والمقارنة ←",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -566,30 +511,32 @@ fun QuramerHubScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        HubMiniMetric("مذاكرة اليوم", formatDurationArabic(focusState.dailyStudyMs), Modifier.weight(1f))
-                        HubMiniMetric("قراءة القرآن", formatDurationArabic(totalReadMs), Modifier.weight(1f))
-                        HubMiniMetric("استماع القرآن", formatDurationArabic(totalListenMs), Modifier.weight(1f))
+                        HubMiniMetric(
+                            label = stringResource(R.string.stat_today_study_label),
+                            value = formatDurationArabic(focusState.dailyStudyMs),
+                            modifier = Modifier.weight(1f)
+                        )
+                        HubMiniMetric(
+                            label = stringResource(R.string.stat_week_study_label),
+                            value = formatDurationArabic(focusState.weeklyStudyMs),
+                            modifier = Modifier.weight(1f)
+                        )
                     }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        HubMiniMetric("السور المكتملة", "$completedSurahsCount / 114", Modifier.weight(1f))
-                        HubMiniMetric("النقاط", "${quranState.profile.points}", Modifier.weight(1f))
-                        HubMiniMetric("الملفات المرفوعة", "${quranState.importedFiles.size}", Modifier.weight(1f))
-                    }
-
-                    if (quranState.importedFiles.isEmpty()) {
-                        OutlinedButton(
-                            onClick = onOpenLibrary,
-                            shape = MaterialTheme.shapes.small,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .minimumInteractiveComponentSize()
-                        ) {
-                            Text("استيراد ملفات المصحف أو التلاوات الصوتية")
-                        }
+                        HubMiniMetric(
+                            label = focusState.currentMonthLabel.ifBlank { stringResource(R.string.stat_month_study_label) },
+                            value = formatDurationArabic(focusState.monthlyStudyMs),
+                            modifier = Modifier.weight(1f)
+                        )
+                        HubMiniMetric(
+                            label = stringResource(R.string.stat_trees_label),
+                            value = stringResource(R.string.stat_trees_value, focusState.plantedTrees.size),
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }

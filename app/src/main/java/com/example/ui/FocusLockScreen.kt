@@ -1,5 +1,6 @@
 package com.example.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -34,9 +35,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
@@ -48,6 +49,7 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Park
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
@@ -59,15 +61,11 @@ import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.MusicNote
-import androidx.compose.material.icons.outlined.Park
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.FilterChip
-import com.example.quran.ui.QuranContainerScreen
+import com.example.quran.audio.QuranAudioPlaybackState
 import com.example.quran.ui.QuranFullPlayerModal
 import com.example.quran.ui.QuranMiniPlayerBar
-import com.example.quran.ui.QuranStatsAndGamificationScreen
-import com.example.quran.ui.QuranSubTab
 import com.example.quran.ui.QuranUiState
 import com.example.quran.ui.QuranViewModel
 import com.example.quran.ui.QuramerHubScreen
@@ -133,7 +131,9 @@ fun FocusLockScreen(
     onRequestNotificationPermission: () -> Unit,
     onSelectTab: (MainTab) -> Unit,
     onSelectStudySubSection: (StudySubSection) -> Unit,
+    onOpenFocusAudio: () -> Unit,
     onSelectTasksSubSection: (TasksSubSection) -> Unit,
+    onDismissSessionFinished: () -> Unit,
     onEditNameClick: () -> Unit,
     onEnableServiceClick: () -> Unit,
     onStudyAppLockChange: (Boolean) -> Unit,
@@ -233,10 +233,28 @@ fun FocusLockScreen(
         )
     }
 
+    if (uiState.showSessionFinishedScreen) {
+        SessionFinishedScreen(
+            durationMs = uiState.finishedSessionDurationMs,
+            onDismiss = onDismissSessionFinished
+        )
+        return
+    }
+
     if (uiState.isFullScreenTimerVisible && uiState.isSessionActive) {
+        val useQuranToggle = !uiState.isAudioPlaying &&
+            (quranUiState.playbackState.isPlaying || quranUiState.playbackState.hasActiveTrack)
         FullScreenTimerScreen(
             uiState = uiState,
-            onToggleAudioPlayback = onToggleAudioPlayback,
+            quranPlayback = quranUiState.playbackState,
+            onToggleAudioPlayback = {
+                if (useQuranToggle) {
+                    quranViewModel.togglePlayPause()
+                } else {
+                    quranViewModel.pauseQuranAudio()
+                    onToggleAudioPlayback()
+                }
+            },
             onExitFullScreen = onCloseFullScreenTimer
         )
         return
@@ -258,6 +276,18 @@ fun FocusLockScreen(
             onToggleShuffle = quranViewModel::toggleShuffle
         )
         return
+    }
+
+    BackHandler(enabled = uiState.selectedTab != MainTab.HOME) {
+        when {
+            uiState.selectedTab == MainTab.FOCUS &&
+                uiState.studySubSection == StudySubSection.STUDY_AUDIO ->
+                onSelectStudySubSection(StudySubSection.FOCUS_LOCK)
+            uiState.selectedTab == MainTab.TASKS &&
+                uiState.tasksSubSection == TasksSubSection.TREE_FARM ->
+                onSelectTasksSubSection(TasksSubSection.DAILY_TASKS)
+            else -> onSelectTab(MainTab.HOME)
+        }
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -332,34 +362,12 @@ fun FocusLockScreen(
                             MainTab.HOME -> {
                                 QuramerHubScreen(
                                     focusState = uiState,
-                                    quranState = quranUiState,
                                     onEditNameClick = onEditNameClick,
                                     onOpenTimerMode = { onOpenWithTimerMode(SessionTimerMode.TIMER) },
                                     onOpenStopwatchMode = { onOpenWithTimerMode(SessionTimerMode.STOPWATCH) },
-                                    onOpenSmartTimer = {
-                                        quranViewModel.selectSubTab(QuranSubTab.SMART_TIMER)
-                                        onSelectTab(MainTab.QURAN)
-                                    },
-                                    onResumeLastReading = {
-                                        quranViewModel.openSurahInReader(quranUiState.profile.lastViewedSurah)
-                                        quranViewModel.selectSubTab(QuranSubTab.READER)
-                                        onSelectTab(MainTab.QURAN)
-                                    },
-                                    onOpenLibrary = {
-                                        quranViewModel.selectSubTab(QuranSubTab.LIBRARY)
-                                        onSelectTab(MainTab.QURAN)
-                                    },
+                                    onOpenFocusAudio = onOpenFocusAudio,
                                     onOpenTreeFarm = { onSelectTasksSubSection(TasksSubSection.TREE_FARM) },
-                                    onOpenStats = { onSelectTab(MainTab.STATS) },
-                                    onAcceptHubQuranSuggestion = {
-                                        if (quranUiState.audioTracks.isNotEmpty()) {
-                                            quranViewModel.proposeQuranListeningForStudyOrHub()
-                                        } else {
-                                            quranViewModel.selectSubTab(QuranSubTab.SMART_TIMER)
-                                            onSelectTab(MainTab.QURAN)
-                                        }
-                                    },
-                                    onDismissHubQuranSuggestion = quranViewModel::dismissHubSuggestion
+                                    onOpenStats = { onSelectTab(MainTab.STATS) }
                                 )
                             }
                             MainTab.FOCUS -> {
@@ -396,8 +404,11 @@ fun FocusLockScreen(
 
                                     when (uiState.studySubSection) {
                                         StudySubSection.FOCUS_LOCK -> {
+                                            val useQuranToggle = !uiState.isAudioPlaying &&
+                                                (quranUiState.playbackState.isPlaying || quranUiState.playbackState.hasActiveTrack)
                                             FocusSessionTabContent(
                                                 uiState = uiState,
+                                                quranPlayback = quranUiState.playbackState,
                                                 needsNotificationPermission = needsNotificationPermission,
                                                 showInlineActionButton = useNavRail,
                                                 onRequestNotificationPermission = onRequestNotificationPermission,
@@ -410,6 +421,15 @@ fun FocusLockScreen(
                                                 onSelectTimerMode = onSelectTimerMode,
                                                 onAutoFullscreenChange = onAutoFullscreenChange,
                                                 onOpenFullScreenTimer = onOpenFullScreenTimer,
+                                                onOpenFocusAudio = onOpenFocusAudio,
+                                                onToggleSessionAudio = {
+                                                    if (useQuranToggle) {
+                                                        quranViewModel.togglePlayPause()
+                                                    } else {
+                                                        quranViewModel.pauseQuranAudio()
+                                                        onToggleAudioPlayback()
+                                                    }
+                                                },
                                                 onSearchQueryChange = onSearchQueryChange,
                                                 onToggleApp = onToggleApp,
                                                 onSelectAllFiltered = onSelectAllFiltered,
@@ -422,25 +442,32 @@ fun FocusLockScreen(
                                         StudySubSection.STUDY_AUDIO -> {
                                             AudioTabContent(
                                                 uiState = uiState,
+                                                quranState = quranUiState,
+                                                quranViewModel = quranViewModel,
                                                 needsNotificationPermission = needsNotificationPermission,
                                                 onRequestNotificationPermission = onRequestNotificationPermission,
-                                                onSelectBuiltInSound = onSelectBuiltInSound,
-                                                onSelectUploadedTrack = onSelectUploadedTrack,
+                                                onSelectBuiltInSound = { sound ->
+                                                    if (uiState.isAudioPlaying) quranViewModel.pauseQuranAudio()
+                                                    onSelectBuiltInSound(sound)
+                                                },
+                                                onSelectUploadedTrack = { trackId ->
+                                                    if (uiState.isAudioPlaying) quranViewModel.pauseQuranAudio()
+                                                    onSelectUploadedTrack(trackId)
+                                                },
                                                 onUploadAudioClick = onUploadAudioClick,
                                                 onDeleteUploadedTrack = onDeleteUploadedTrack,
                                                 onVolumeChange = onAudioVolumeChange,
                                                 onLoopToggle = onAudioLoopToggle,
-                                                onTogglePlayback = onToggleAudioPlayback
+                                                onTogglePlayback = {
+                                                    if (!uiState.isAudioPlaying) {
+                                                        quranViewModel.pauseQuranAudio()
+                                                    }
+                                                    onToggleAudioPlayback()
+                                                }
                                             )
                                         }
                                     }
                                 }
-                            }
-                            MainTab.QURAN -> {
-                                QuranContainerScreen(
-                                    quranState = quranUiState,
-                                    quranViewModel = quranViewModel
-                                )
                             }
                             MainTab.TASKS -> {
                                 Column(modifier = Modifier.fillMaxSize()) {
@@ -491,11 +518,7 @@ fun FocusLockScreen(
                                 }
                             }
                             MainTab.STATS -> {
-                                QuranStatsAndGamificationScreen(
-                                    focusState = uiState,
-                                    quranState = quranUiState,
-                                    onUpdateGoals = quranViewModel::updateGoals
-                                )
+                                StudyStatsAndArchiveScreen(uiState = uiState)
                             }
                         }
                     }
@@ -762,22 +785,6 @@ private fun FocusBottomNavigationBar(
             modifier = Modifier.testTag("nav_tab_focus")
         )
         NavigationBarItem(
-            selected = selectedTab == MainTab.QURAN,
-            onClick = { onSelectTab(MainTab.QURAN) },
-            icon = {
-                Icon(
-                    imageVector = if (selectedTab == MainTab.QURAN) {
-                        Icons.AutoMirrored.Filled.MenuBook
-                    } else {
-                        Icons.AutoMirrored.Outlined.MenuBook
-                    },
-                    contentDescription = null
-                )
-            },
-            label = { Text(stringResource(R.string.tab_quran), maxLines = 1) },
-            modifier = Modifier.testTag("nav_tab_quran")
-        )
-        NavigationBarItem(
             selected = selectedTab == MainTab.TASKS,
             onClick = { onSelectTab(MainTab.TASKS) },
             icon = {
@@ -838,22 +845,6 @@ private fun FocusNavigationRail(
             modifier = Modifier.testTag("rail_tab_focus")
         )
         NavigationRailItem(
-            selected = selectedTab == MainTab.QURAN,
-            onClick = { onSelectTab(MainTab.QURAN) },
-            icon = {
-                Icon(
-                    imageVector = if (selectedTab == MainTab.QURAN) {
-                        Icons.AutoMirrored.Filled.MenuBook
-                    } else {
-                        Icons.AutoMirrored.Outlined.MenuBook
-                    },
-                    contentDescription = null
-                )
-            },
-            label = { Text(stringResource(R.string.tab_quran)) },
-            modifier = Modifier.testTag("rail_tab_quran")
-        )
-        NavigationRailItem(
             selected = selectedTab == MainTab.TASKS,
             onClick = { onSelectTab(MainTab.TASKS) },
             icon = {
@@ -883,6 +874,7 @@ private fun FocusNavigationRail(
 @Composable
 private fun FocusSessionTabContent(
     uiState: FocusUiState,
+    quranPlayback: QuranAudioPlaybackState,
     needsNotificationPermission: Boolean,
     showInlineActionButton: Boolean,
     onRequestNotificationPermission: () -> Unit,
@@ -895,6 +887,8 @@ private fun FocusSessionTabContent(
     onSelectTimerMode: (SessionTimerMode) -> Unit,
     onAutoFullscreenChange: (Boolean) -> Unit,
     onOpenFullScreenTimer: () -> Unit,
+    onOpenFocusAudio: () -> Unit,
+    onToggleSessionAudio: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onToggleApp: (String) -> Unit,
     onSelectAllFiltered: () -> Unit,
@@ -925,6 +919,7 @@ private fun FocusSessionTabContent(
                         onEditNameClick = onEditNameClick,
                         onOpenFullScreenTimer = onOpenFullScreenTimer
                     )
+                    FocusDateAndCalendarSection(uiState = uiState)
                     HomeStatsCard(uiState = uiState)
                     if (needsNotificationPermission) {
                         NotificationPermissionBanner(
@@ -948,6 +943,12 @@ private fun FocusSessionTabContent(
                         onMinutesChange = onMinutesInputChange,
                         onAutoFullscreenChange = onAutoFullscreenChange,
                         onStudyAppLockChange = onStudyAppLockChange
+                    )
+                    SessionAudioQuickCard(
+                        uiState = uiState,
+                        quranPlayback = quranPlayback,
+                        onToggleAudio = onToggleSessionAudio,
+                        onOpenFocusAudio = onOpenFocusAudio
                     )
                     if (showInlineActionButton) {
                         SessionActionButton(
@@ -997,6 +998,9 @@ private fun FocusSessionTabContent(
                         onOpenFullScreenTimer = onOpenFullScreenTimer
                     )
                 }
+                item(key = "daily_date_calendar") {
+                    FocusDateAndCalendarSection(uiState = uiState)
+                }
                 item(key = "home_stats") {
                     HomeStatsCard(uiState = uiState)
                 }
@@ -1027,6 +1031,14 @@ private fun FocusSessionTabContent(
                         onMinutesChange = onMinutesInputChange,
                         onAutoFullscreenChange = onAutoFullscreenChange,
                         onStudyAppLockChange = onStudyAppLockChange
+                    )
+                }
+                item(key = "session_audio_quick") {
+                    SessionAudioQuickCard(
+                        uiState = uiState,
+                        quranPlayback = quranPlayback,
+                        onToggleAudio = onToggleSessionAudio,
+                        onOpenFocusAudio = onOpenFocusAudio
                     )
                 }
                 item(key = "apps_header") {
@@ -1133,20 +1145,57 @@ private fun FocusHeroCard(
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Salawat banner inside the app hero
-                Surface(
-                    shape = CircleShape,
-                    color = Color(0xFF34D399).copy(alpha = 0.18f),
-                    border = BorderStroke(1.dp, Color(0xFF6EE7B7).copy(alpha = 0.55f)),
-                    modifier = Modifier.testTag("hero_salawat_banner")
+                // Salawat banner + daily date pill inside the app hero
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = stringResource(R.string.salawat_banner_text),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFA7F3D0),
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-                    )
+                    Surface(
+                        shape = CircleShape,
+                        color = Color(0xFF34D399).copy(alpha = 0.18f),
+                        border = BorderStroke(1.dp, Color(0xFF6EE7B7).copy(alpha = 0.55f)),
+                        modifier = Modifier.testTag("hero_salawat_banner")
+                    ) {
+                        Text(
+                            text = stringResource(R.string.salawat_banner_text),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFA7F3D0),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+
+                    if (uiState.currentDateFormatted.isNotBlank()) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.White.copy(alpha = 0.14f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.28f)),
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .testTag("hero_daily_date_pill")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.CalendarMonth,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFDE68A),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = uiState.currentDateFormatted,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color(0xFFFDE68A),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Row(
@@ -1427,8 +1476,9 @@ private fun HomeStatsCard(uiState: FocusUiState) {
                 )
                 HomeStatTile(
                     icon = Icons.Filled.History,
-                    label = stringResource(R.string.stat_total_study_label),
-                    value = formatDurationArabic(uiState.totalStudyMs),
+                    label = stringResource(R.string.stat_month_study_label),
+                    value = formatDurationArabic(uiState.monthlyStudyMs),
+                    subtitle = "الإجمالي: ${formatDurationArabic(uiState.totalStudyMs)}",
                     containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                     modifier = Modifier
@@ -1937,6 +1987,141 @@ private fun DurationSelectorCard(
 }
 
 @Composable
+private fun SessionAudioQuickCard(
+    uiState: FocusUiState,
+    quranPlayback: QuranAudioPlaybackState,
+    onToggleAudio: () -> Unit,
+    onOpenFocusAudio: () -> Unit
+) {
+    val isQuranActive = !uiState.isAudioPlaying &&
+        (quranPlayback.isPlaying || quranPlayback.hasActiveTrack)
+    val anyPlaying = uiState.isAudioPlaying || quranPlayback.isPlaying
+    val uploadedTrackTitle = uiState.uploadedTracks
+        .firstOrNull { it.id == uiState.selectedUploadedTrackId }
+        ?.displayName
+    val builtInTitle = stringResource(builtInSoundLabelRes(uiState.selectedBuiltInSound))
+    val currentQuranTrack = quranPlayback.currentTrack
+    val subtitle = when {
+        isQuranActive && currentQuranTrack != null -> {
+            val reciterSuffix = if (currentQuranTrack.reciterName.isNotBlank()) " • ${currentQuranTrack.reciterName}" else ""
+            "القرآن: ${currentQuranTrack.displayName.ifBlank { "تلاوة قرآنية" }}$reciterSuffix"
+        }
+        uploadedTrackTitle != null -> "ملف صوتي: $uploadedTrackTitle"
+        else -> "صوت التركيز: $builtInTitle"
+    }
+
+    Card(
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (anyPlaying) {
+                StudySuccessGreen.copy(alpha = 0.55f)
+            } else {
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+            }
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("session_audio_quick_card")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = if (anyPlaying) {
+                        StudySuccessGreen.copy(alpha = 0.16f)
+                    } else {
+                        MaterialTheme.colorScheme.primaryContainer
+                    },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (isQuranActive) {
+                                Icons.AutoMirrored.Filled.MenuBook
+                            } else {
+                                Icons.Filled.MusicNote
+                            },
+                            contentDescription = null,
+                            tint = if (anyPlaying) StudySuccessGreen else MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "القرآن وأصوات المذاكرة أثناء الجلسة",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (anyPlaying) StudySuccessGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onToggleAudio,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (anyPlaying) {
+                            MaterialTheme.colorScheme.secondary
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        }
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .minimumInteractiveComponentSize()
+                        .testTag("session_audio_toggle_button")
+                ) {
+                    Icon(
+                        imageVector = if (anyPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (anyPlaying) "إيقاف مؤقت" else "تشغيل الآن", maxLines = 1)
+                }
+
+                OutlinedButton(
+                    onClick = onOpenFocusAudio,
+                    modifier = Modifier
+                        .weight(1f)
+                        .minimumInteractiveComponentSize()
+                        .testTag("session_open_audio_quran_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("اختيار صوت/قرآن", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun AllowedAppsHeader(
     allowedCount: Int,
     isLocked: Boolean,
@@ -2376,4 +2561,12 @@ private fun formatCountdown(remainingMs: Long): String {
     } else {
         String.format(Locale.US, "%02d:%02d", minutes, seconds)
     }
+}
+
+internal fun builtInSoundLabelRes(sound: BuiltInSound): Int = when (sound) {
+    BuiltInSound.RAIN -> R.string.audio_rain
+    BuiltInSound.WHITE_NOISE -> R.string.audio_white_noise
+    BuiltInSound.ALPHA -> R.string.audio_alpha
+    BuiltInSound.BETA -> R.string.audio_beta
+    BuiltInSound.GAMMA -> R.string.audio_gamma
 }

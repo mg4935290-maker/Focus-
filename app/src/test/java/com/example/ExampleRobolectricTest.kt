@@ -39,6 +39,8 @@ class ExampleRobolectricTest {
         assertEquals("تأكيد", context.getString(R.string.action_confirm_apps))
         assertEquals("الإحصائيات", context.getString(R.string.home_stats_title))
         assertEquals("تأكيد التطبيقات المسموحة", context.getString(R.string.confirm_apps_title))
+        assertEquals("عاش استمر 🥰🥳🥳🩵", context.getString(R.string.session_finished_message))
+        assertEquals("الأصوات والقرآن", context.getString(R.string.tab_audio))
     }
 
     @Test

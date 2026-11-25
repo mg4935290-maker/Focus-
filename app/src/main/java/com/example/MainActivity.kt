@@ -155,15 +155,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             QuranUiEvent.LaunchMultiFilePicker -> {
-                                multiQuranFileLauncher.launch(
-                                    arrayOf(
-                                        "application/pdf",
-                                        "application/json",
-                                        "text/plain",
-                                        "audio/*",
-                                        "*/*"
-                                    )
-                                )
+                                multiQuranFileLauncher.launch(arrayOf("audio/*"))
                             }
                             is QuranUiEvent.OpenPdfViewer -> {
                                 quranViewModel.openPdfViewer(event.file)
@@ -213,7 +205,9 @@ class MainActivity : ComponentActivity() {
                                 onRequestNotificationPermission = viewModel::requestNotificationPermission,
                                 onSelectTab = viewModel::selectTab,
                                 onSelectStudySubSection = viewModel::selectStudySubSection,
+                                onOpenFocusAudio = viewModel::openFocusAudio,
                                 onSelectTasksSubSection = viewModel::selectTasksSubSection,
+                                onDismissSessionFinished = viewModel::dismissSessionFinishedScreen,
                                 onEditNameClick = viewModel::onEditNameClick,
                                 onEnableServiceClick = viewModel::onEnableServiceClick,
                                 onStudyAppLockChange = viewModel::onStudyAppLockEnabledChange,

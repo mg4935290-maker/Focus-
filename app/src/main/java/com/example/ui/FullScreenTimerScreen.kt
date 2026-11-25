@@ -48,15 +48,18 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.quran.audio.QuranAudioPlaybackState
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import java.util.Locale
 
 @Composable
 fun FullScreenTimerScreen(
     uiState: FocusUiState,
+    quranPlayback: QuranAudioPlaybackState = QuranAudioPlaybackState(),
     onToggleAudioPlayback: () -> Unit,
     onExitFullScreen: () -> Unit,
     modifier: Modifier = Modifier
@@ -231,20 +234,50 @@ fun FullScreenTimerScreen(
                 textAlign = TextAlign.Center
             )
 
+            val isQuranActive = !uiState.isAudioPlaying &&
+                (quranPlayback.isPlaying || quranPlayback.hasActiveTrack)
+            val anyAudioPlaying = uiState.isAudioPlaying || quranPlayback.isPlaying
+            val activeAudioTitle: String? = when {
+                uiState.isAudioPlaying -> {
+                    val uploaded = uiState.uploadedTracks.firstOrNull { it.id == uiState.selectedUploadedTrackId }
+                    uploaded?.displayName ?: stringResource(builtInSoundLabelRes(uiState.selectedBuiltInSound))
+                }
+                isQuranActive -> quranPlayback.currentTrack?.displayName?.ifBlank { "تلاوة القرآن" } ?: "تلاوة القرآن"
+                else -> null
+            }
+
+            if (activeAudioTitle != null) {
+                Surface(
+                    shape = CircleShape,
+                    color = Color.White.copy(alpha = 0.14f)
+                ) {
+                    Text(
+                        text = if (isQuranActive) "القرآن: $activeAudioTitle" else activeAudioTitle,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Color(0xFFFDE68A),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
             OutlinedButton(
                 onClick = onToggleAudioPlayback,
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f)),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                modifier = Modifier.minimumInteractiveComponentSize()
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .testTag("fullscreen_audio_toggle_button")
             ) {
                 Icon(
-                    imageVector = if (uiState.isAudioPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    imageVector = if (anyAudioPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                     contentDescription = null
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = stringResource(
-                        if (uiState.isAudioPlaying) R.string.audio_pause else R.string.audio_play
+                        if (anyAudioPlaying) R.string.audio_pause else R.string.audio_play
                     )
                 )
             }

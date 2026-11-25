@@ -66,7 +66,7 @@
 
         <service
             android:name=".quran.audio.QuranPlaybackService"
-            android:exported="true"
+            android:exported="false"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaSessionService" />

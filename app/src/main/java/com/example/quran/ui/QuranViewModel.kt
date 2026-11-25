@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.audio.FocusAudioService
 import com.example.data.FocusRepository
 import com.example.quran.audio.QuranAudioPlaybackState
 import com.example.quran.audio.QuranPlayerController
@@ -822,6 +823,9 @@ class QuranViewModel @JvmOverloads constructor(
     }
 
     fun deleteImportedFile(file: ImportedFileEntity) {
+        if (playerController.state.value.currentTrack?.importedFileId == file.id) {
+            playerController.pauseIfPlaying()
+        }
         viewModelScope.launch {
             repository.deleteImportedFile(file)
             _events.tryEmit(QuranUiEvent.ShowMessage("تم حذف «${file.displayName}» من المكتبة"))
@@ -886,10 +890,18 @@ class QuranViewModel @JvmOverloads constructor(
             _events.tryEmit(QuranUiEvent.ShowMessage("أضف ملفاً صوتياً أولاً من المكتبة"))
             return
         }
+        FocusAudioService.stop(getApplication())
         playerController.playPlaylist(tracks, startIndex)
     }
 
-    fun togglePlayPause() = playerController.togglePlayPause()
+    fun togglePlayPause() {
+        if (!_uiState.value.playbackState.isPlaying) {
+            FocusAudioService.stop(getApplication())
+        }
+        playerController.togglePlayPause()
+    }
+
+    fun pauseQuranAudio() = playerController.pauseIfPlaying()
     fun seekTo(positionMs: Long) = playerController.seekTo(positionMs)
     fun seekForward10s() = playerController.seekForward10s()
     fun seekBack10s() = playerController.seekBack10s()

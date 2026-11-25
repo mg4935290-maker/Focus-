@@ -6,12 +6,15 @@ import androidx.lifecycle.viewModelScope
 import com.example.R
 import com.example.audio.FocusAudioService
 import com.example.data.BuiltInSound
+import com.example.data.DailyStudyRecord
 import com.example.data.DailyTask
 import com.example.data.FocusRepository
 import com.example.data.InstalledApp
+import com.example.data.MonthlyStudyArchiveEntry
 import com.example.data.PlantedTree
 import com.example.data.SelectedAudioSource
 import com.example.data.UploadedAudioTrack
+import com.example.data.WeeklyStudyArchiveEntry
 import com.example.notifications.SalawatReminderScheduler
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -29,7 +32,6 @@ import java.util.UUID
 enum class MainTab {
     HOME,
     FOCUS,
-    QURAN,
     TASKS,
     STATS
 }
@@ -84,6 +86,21 @@ data class FocusUiState(
     val totalStudyMs: Long = 0L,
     val unplantedStudyMs: Long = 0L,
     val plantedTrees: List<PlantedTree> = emptyList(),
+    val currentWeekLabel: String = "",
+    val weeklyStudyMs: Long = 0L,
+    val weeklyTreesCount: Int = 0,
+    val weeklyActiveDays: Int = 0,
+    val currentMonthLabel: String = "",
+    val monthlyStudyMs: Long = 0L,
+    val monthlyTreesCount: Int = 0,
+    val monthlyActiveDays: Int = 0,
+    val currentDateKey: String = "",
+    val currentDateFormatted: String = "",
+    val dailyHistory: List<DailyStudyRecord> = emptyList(),
+    val weeklyArchive: List<WeeklyStudyArchiveEntry> = emptyList(),
+    val monthlyArchive: List<MonthlyStudyArchiveEntry> = emptyList(),
+    val showSessionFinishedScreen: Boolean = false,
+    val finishedSessionDurationMs: Long = 0L,
     val dailyTasks: List<DailyTask> = emptyList(),
     val newTaskInput: String = "",
     val achievementReasonResId: Int? = null,
@@ -206,6 +223,26 @@ class FocusViewModel @JvmOverloads constructor(
                 totalStudyMs = snapshot.totalStudyMs,
                 unplantedStudyMs = snapshot.unplantedStudyMs,
                 plantedTrees = snapshot.trees,
+                currentWeekLabel = snapshot.currentWeekLabel,
+                weeklyStudyMs = snapshot.weeklyStudyMs,
+                weeklyTreesCount = snapshot.weeklyTreesCount,
+                weeklyActiveDays = snapshot.weeklyActiveDays,
+                currentMonthLabel = snapshot.currentMonthLabel,
+                monthlyStudyMs = snapshot.monthlyStudyMs,
+                monthlyTreesCount = snapshot.monthlyTreesCount,
+                monthlyActiveDays = snapshot.monthlyActiveDays,
+                currentDateKey = snapshot.currentDateKey,
+                currentDateFormatted = snapshot.currentDateFormatted,
+                dailyHistory = snapshot.dailyHistory,
+                weeklyArchive = snapshot.weeklyArchive,
+                monthlyArchive = snapshot.monthlyArchive,
+                showSessionFinishedScreen = (!stopwatchActive && remaining == 0L && snapshot.hasUnseenSessionFinished) ||
+                    state.showSessionFinishedScreen,
+                finishedSessionDurationMs = if (snapshot.hasUnseenSessionFinished) {
+                    snapshot.lastFinishedSessionDurationMs
+                } else {
+                    state.finishedSessionDurationMs
+                },
                 dailyTasks = tasks,
                 uploadedTracks = uploadedTracks,
                 selectedBuiltInSound = builtInSound,
@@ -260,6 +297,26 @@ class FocusViewModel @JvmOverloads constructor(
                 totalStudyMs = snapshot.totalStudyMs,
                 unplantedStudyMs = snapshot.unplantedStudyMs,
                 plantedTrees = snapshot.trees,
+                currentWeekLabel = snapshot.currentWeekLabel,
+                weeklyStudyMs = snapshot.weeklyStudyMs,
+                weeklyTreesCount = snapshot.weeklyTreesCount,
+                weeklyActiveDays = snapshot.weeklyActiveDays,
+                currentMonthLabel = snapshot.currentMonthLabel,
+                monthlyStudyMs = snapshot.monthlyStudyMs,
+                monthlyTreesCount = snapshot.monthlyTreesCount,
+                monthlyActiveDays = snapshot.monthlyActiveDays,
+                currentDateKey = snapshot.currentDateKey,
+                currentDateFormatted = snapshot.currentDateFormatted,
+                dailyHistory = snapshot.dailyHistory,
+                weeklyArchive = snapshot.weeklyArchive,
+                monthlyArchive = snapshot.monthlyArchive,
+                showSessionFinishedScreen = (!activeNow && snapshot.hasUnseenSessionFinished) ||
+                    state.showSessionFinishedScreen,
+                finishedSessionDurationMs = if (!activeNow && snapshot.hasUnseenSessionFinished) {
+                    snapshot.lastFinishedSessionDurationMs
+                } else {
+                    state.finishedSessionDurationMs
+                },
                 dailyTasks = tasks,
                 isFullScreenTimerVisible = if (!activeNow) false else state.isFullScreenTimerVisible
             )
@@ -300,6 +357,20 @@ class FocusViewModel @JvmOverloads constructor(
 
     fun selectStudySubSection(section: StudySubSection) {
         _uiState.update { it.copy(selectedTab = MainTab.FOCUS, studySubSection = section) }
+    }
+
+    fun openFocusAudio() {
+        _uiState.update { it.copy(selectedTab = MainTab.FOCUS, studySubSection = StudySubSection.STUDY_AUDIO) }
+    }
+
+    fun dismissSessionFinishedScreen() {
+        repository.dismissSessionFinishedCelebration()
+        _uiState.update {
+            it.copy(
+                showSessionFinishedScreen = false,
+                finishedSessionDurationMs = 0L
+            )
+        }
     }
 
     fun selectTasksSubSection(section: TasksSubSection) {
@@ -496,7 +567,9 @@ class FocusViewModel @JvmOverloads constructor(
                     remainingMs = 0L,
                     isStopwatchActive = true,
                     stopwatchElapsedMs = 0L,
-                    isFullScreenTimerVisible = openFullScreen
+                    isFullScreenTimerVisible = openFullScreen,
+                    currentDateKey = repository.currentDateKey(now),
+                    currentDateFormatted = FocusRepository.formatFullDateArabic(now)
                 )
             }
         } else {
@@ -524,7 +597,9 @@ class FocusViewModel @JvmOverloads constructor(
                     remainingMs = (endMs - now).coerceAtLeast(0L),
                     isStopwatchActive = false,
                     stopwatchElapsedMs = 0L,
-                    isFullScreenTimerVisible = openFullScreen
+                    isFullScreenTimerVisible = openFullScreen,
+                    currentDateKey = repository.currentDateKey(now),
+                    currentDateFormatted = FocusRepository.formatFullDateArabic(now)
                 )
             }
         }
@@ -549,9 +624,17 @@ class FocusViewModel @JvmOverloads constructor(
 
     fun confirmCancelSession() {
         val now = System.currentTimeMillis()
+        val wasStopwatch = _uiState.value.isStopwatchActive
+        val startMs = _uiState.value.sessionStartMs
+        val elapsedStopwatchMs = if (wasStopwatch && startMs > 0L) (now - startMs).coerceAtLeast(0L) else 0L
         val snapshot = repository.cancelSession(now)
         tickerJob?.cancel()
         FocusAudioService.stop(getApplication())
+
+        val celebrateStopwatchFinish = wasStopwatch && elapsedStopwatchMs > 0L
+        if (celebrateStopwatchFinish) {
+            repository.markSessionFinishedCelebration(elapsedStopwatchMs)
+        }
 
         _uiState.update {
             it.copy(
@@ -566,7 +649,22 @@ class FocusViewModel @JvmOverloads constructor(
                 dailyStudyMs = snapshot.dailyStudyMs,
                 totalStudyMs = snapshot.totalStudyMs,
                 unplantedStudyMs = snapshot.unplantedStudyMs,
-                plantedTrees = snapshot.trees
+                plantedTrees = snapshot.trees,
+                currentWeekLabel = snapshot.currentWeekLabel,
+                weeklyStudyMs = snapshot.weeklyStudyMs,
+                weeklyTreesCount = snapshot.weeklyTreesCount,
+                weeklyActiveDays = snapshot.weeklyActiveDays,
+                currentMonthLabel = snapshot.currentMonthLabel,
+                monthlyStudyMs = snapshot.monthlyStudyMs,
+                monthlyTreesCount = snapshot.monthlyTreesCount,
+                monthlyActiveDays = snapshot.monthlyActiveDays,
+                currentDateKey = snapshot.currentDateKey,
+                currentDateFormatted = snapshot.currentDateFormatted,
+                dailyHistory = snapshot.dailyHistory,
+                weeklyArchive = snapshot.weeklyArchive,
+                monthlyArchive = snapshot.monthlyArchive,
+                showSessionFinishedScreen = celebrateStopwatchFinish,
+                finishedSessionDurationMs = if (celebrateStopwatchFinish) elapsedStopwatchMs else 0L
             )
         }
         checkHoursAchievement(snapshot.dailyStudyMs, now)
@@ -764,6 +862,26 @@ class FocusViewModel @JvmOverloads constructor(
                         totalStudyMs = snapshot.totalStudyMs,
                         unplantedStudyMs = snapshot.unplantedStudyMs,
                         plantedTrees = snapshot.trees,
+                        currentWeekLabel = snapshot.currentWeekLabel,
+                        weeklyStudyMs = snapshot.weeklyStudyMs,
+                        weeklyTreesCount = snapshot.weeklyTreesCount,
+                        weeklyActiveDays = snapshot.weeklyActiveDays,
+                        currentMonthLabel = snapshot.currentMonthLabel,
+                        monthlyStudyMs = snapshot.monthlyStudyMs,
+                        monthlyTreesCount = snapshot.monthlyTreesCount,
+                        monthlyActiveDays = snapshot.monthlyActiveDays,
+                        currentDateKey = snapshot.currentDateKey,
+                        currentDateFormatted = snapshot.currentDateFormatted,
+                        dailyHistory = snapshot.dailyHistory,
+                        weeklyArchive = snapshot.weeklyArchive,
+                        monthlyArchive = snapshot.monthlyArchive,
+                        showSessionFinishedScreen = (!activeNow && snapshot.hasUnseenSessionFinished) ||
+                            state.showSessionFinishedScreen,
+                        finishedSessionDurationMs = if (!activeNow && snapshot.hasUnseenSessionFinished) {
+                            snapshot.lastFinishedSessionDurationMs
+                        } else {
+                            state.finishedSessionDurationMs
+                        },
                         sessionEndMs = snapshot.sessionEndMs,
                         sessionDurationMs = snapshot.sessionDurationMs,
                         isFullScreenTimerVisible = if (!activeNow) false else state.isFullScreenTimerVisible

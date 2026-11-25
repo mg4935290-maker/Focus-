@@ -7,12 +7,14 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import androidx.core.net.toUri
 import com.example.MainActivity
 import com.example.R
@@ -153,7 +155,12 @@ class FocusAudioService : Service() {
     private fun startForegroundWithNotification(trackTitle: String) {
         ensureNotificationChannel()
         val notification = buildNotification(trackTitle)
-        startForeground(NOTIFICATION_ID, notification)
+        val foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+        } else {
+            0
+        }
+        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, foregroundType)
     }
 
     private fun ensureNotificationChannel() {

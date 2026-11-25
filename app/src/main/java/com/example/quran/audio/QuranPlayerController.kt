@@ -237,6 +237,14 @@ open class QuranPlayerController(context: Context) {
         _state.update { it.copy(shuffleEnabled = next) }
     }
 
+    fun pauseIfPlaying() {
+        val controller = mediaController ?: return
+        if (controller.isPlaying) {
+            controller.pause()
+            syncFromPlayer()
+        }
+    }
+
     fun stopPlayback() {
         mediaController?.stop()
         _state.update {

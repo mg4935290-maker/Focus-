@@ -22,13 +22,14 @@
     <string name="stat_tasks_label">المهام المنجزة</string>
     <string name="stat_trees_value">%1$d شجرة</string>
     <string name="stat_tasks_value">%1$d / %2$d</string>
+    <string name="stat_week_study_label">مذاكرة هذا الأسبوع</string>
+    <string name="stat_month_study_label">مذاكرة هذا الشهر</string>
     <string name="stat_next_tree_hint">القادمة: %1$d / 60 د</string>
 
     <!-- Navigation Tabs -->
     <string name="tab_home">الرئيسية</string>
     <string name="tab_focus">المذاكرة</string>
-    <string name="tab_quran">القرآن</string>
-    <string name="tab_audio">الأصوات</string>
+    <string name="tab_audio">الأصوات والقرآن</string>
     <string name="tab_tasks">المهام</string>
     <string name="tab_farm">المزرعة</string>
     <string name="tab_stats">الإحصائيات</string>
@@ -118,6 +119,11 @@
     <string name="achievement_reason_tasks">أنهيت جميع مهامك اليومية بنجاح!</string>
     <string name="achievement_reason_hours">تجاوزت ٤ ساعات مذاكرة فعلية اليوم!</string>
     <string name="achievement_ok_button">أكمل التفوّق</string>
+
+    <!-- Session Finished Screen -->
+    <string name="session_finished_title">انتهت الجلسة!</string>
+    <string name="session_finished_message">عاش استمر 🥰🥳🥳🩵</string>
+    <string name="session_finished_button">العودة</string>
 
     <!-- Full-Screen Timer -->
     <string name="fullscreen_timer_open_button">شاشة العدّاد الكاملة</string>
